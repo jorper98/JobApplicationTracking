@@ -3,6 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { Target, Sun, Moon, LogOut } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
+import Link from "next/link";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -11,15 +12,19 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white dark:border-white/[0.08] dark:bg-[#0d0d14]">
       <div className="flex items-center justify-between px-6 h-14">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center">
+        <Link href="/dashboard" className="flex items-center gap-2.5 group">
+          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center group-hover:bg-indigo-500 transition-colors">
             <Target className="w-4 h-4 text-white" />
           </div>
           <div className="flex flex-col leading-none">
-            <span className="font-bold text-gray-900 dark:text-white text-sm">JobApplicationTracker</span>
-            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.1.2</span>
+            <span className="font-bold text-gray-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              JobApplicationTracker
+            </span>
+            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">
+              v1.1.3
+            </span>
           </div>
-        </div>
+        </Link>
         <div className="flex items-center gap-1">
           <button
             onClick={logout}

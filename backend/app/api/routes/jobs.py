@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import Job, JobNote, User
-from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteResponse
+from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text
 from app.core.auth import get_current_user
 from typing import List
@@ -103,6 +103,18 @@ def create_job_note(job_id: str, note_data: JobNoteCreate, user: User = Depends(
     db.commit()
     db.refresh(job_note)
     return job_note
+
+
+@router.patch("/{job_id}/notes/{note_id}", response_model=JobNoteResponse)
+def update_job_note(job_id: str, note_id: str, note_data: JobNoteUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _get_owned_job(db, user, job_id)
+    note = db.query(JobNote).filter(JobNote.id == note_id, JobNote.job_id == job_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note.note = note_data.note
+    db.commit()
+    db.refresh(note)
+    return note
 
 
 @router.delete("/{job_id}/notes/{note_id}")

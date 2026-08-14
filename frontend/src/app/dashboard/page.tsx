@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import { Briefcase, Target, TrendingUp, Percent, Bookmark, FileText } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
@@ -60,11 +59,8 @@ export default function DashboardPage() {
   const saved = board.saved?.length || 0;
   const interview = board.interview?.length || 0;
   const offer = board.offer?.length || 0;
-  const scored = all.filter((c) => typeof c.match_score === "number");
-  const avgMatch =
-    scored.length > 0
-      ? Math.round(scored.reduce((s, c) => s + (c.match_score || 0), 0) / scored.length)
-      : 0;
+  const archived =
+    (board.rejected?.length || 0) + (board.not_pursued?.length || 0) + (board.ghosted?.length || 0);
 
   const pieData = Object.entries(STATUS_META)
     .map(([key, meta]) => ({ name: meta.label, value: board[key]?.length || 0, color: meta.color }))
@@ -75,12 +71,12 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   const cards = [
-    { label: "Saved", value: saved, icon: Bookmark, color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
-    { label: "Applications", value: total, icon: Briefcase, color: "#60a5fa", bg: "rgba(59,130,246,0.15)" },
-    { label: "Interviews", value: interview, icon: Target, color: "#4ade80", bg: "rgba(34,197,94,0.15)" },
-    { label: "Offers", value: offer, icon: TrendingUp, color: "#c084fc", bg: "rgba(168,85,247,0.15)" },
-    { label: "Resumes", value: resumeCount, icon: FileText, color: "#22d3ee", bg: "rgba(34,211,238,0.15)" },
-    { label: "Avg Match", value: avgMatch + "%", icon: Percent, color: "#a5b4fc", bg: "rgba(99,102,241,0.15)" },
+    { label: "Saved", value: saved, color: "#94a3b8" },
+    { label: "Applications", value: total, color: "#60a5fa" },
+    { label: "Interviews", value: interview, color: "#fbbf24" },
+    { label: "Offers", value: offer, color: "#4ade80" },
+    { label: "Resumes", value: resumeCount, color: "#22d3ee" },
+    { label: "Archived", value: archived, color: "#8b8b96" },
   ];
 
   return (
@@ -94,22 +90,23 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-28 bg-white dark:bg-[#16161f] rounded-xl animate-pulse" />
+            <div key={i} className="aspect-square bg-white dark:bg-[#16161f] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
           {cards.map((card) => (
-            <div key={card.label} className="bg-white dark:bg-[#16161f] rounded-xl border border-gray-200 dark:border-white/[0.08] p-5 flex flex-col gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: card.bg }}>
-                <card.icon className="w-4 h-4" style={{ color: card.color }} />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{card.value}</p>
-                <p className="text-sm text-gray-500 dark:text-[#8b8b96] mt-0.5">{card.label}</p>
-              </div>
+            <div
+              key={card.label}
+              title={card.label}
+              className="aspect-square bg-white dark:bg-[#16161f] rounded-xl border border-gray-200 dark:border-white/[0.08] flex flex-col items-center justify-center gap-0.5"
+            >
+              <p className="text-2xl font-bold" style={{ color: card.color }}>
+                {card.value}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-[#8b8b96]">{card.label}</p>
             </div>
           ))}
         </div>

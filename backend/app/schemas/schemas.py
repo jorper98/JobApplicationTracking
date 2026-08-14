@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, List
 from datetime import datetime
 from app.models.models import ApplicationStatus
@@ -56,6 +56,10 @@ class JobResponse(BaseModel):
 
 class JobNoteCreate(BaseModel):
     note: str
+
+
+class JobNoteUpdate(BaseModel):
+    note: str = Field(min_length=1)
 
 
 class JobNoteResponse(BaseModel):

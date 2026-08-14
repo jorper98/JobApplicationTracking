@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { Loader2, Plus, Trash2, Pencil, Search } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Search, X, FileText } from "lucide-react";
 import { JobModal } from "@/components/JobModal";
 
 interface Job {
@@ -20,6 +21,26 @@ interface JobNote {
   id: string;
   job_id: string;
   note: string;
+  created_at: string;
+}
+
+interface Resume {
+  id: string;
+  filename: string;
+  is_active: boolean;
+  version: number;
+  created_at: string;
+}
+
+interface Analysis {
+  id: string;
+  job_id: string;
+  resume_id: string;
+  match_score: number | null;
+  matching_skills: string[];
+  missing_skills: string[];
+  resume_suggestions: string[];
+  cover_letter: string | null;
   created_at: string;
 }
 
@@ -44,6 +65,34 @@ const STATUS_BADGE: Record<string, string> = {
   not_pursued: "bg-gray-200 dark:bg-white/[0.05] text-gray-600 dark:text-[#8b8b96]",
 };
 
+function SkillPills({ skills, tone }: { skills: string[]; tone: "green" | "red" }) {
+  const list = skills || [];
+  if (list.length === 0) return <span className="text-xs text-gray-400 dark:text-[#5a5a64]">—</span>;
+  const shown = list.slice(0, 3);
+  const extra = list.length - shown.length;
+  const cls =
+    tone === "green"
+      ? "bg-green-500/15 text-green-700 dark:text-green-300"
+      : "bg-red-500/15 text-red-700 dark:text-red-300";
+  return (
+    <div className="flex flex-wrap gap-1">
+      {shown.map((s) => (
+        <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full ${cls}`}>
+          {s}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          className="text-[11px] bg-gray-100 dark:bg-white/[0.05] text-gray-500 dark:text-[#8b8b96] px-2 py-0.5 rounded-full"
+          title={list.slice(3).join(", ")}
+        >
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function JobsPage() {
   const searchParams = useSearchParams();
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -56,13 +105,19 @@ export default function JobsPage() {
   const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [analysis, setAnalysis] = useState<any>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"notes" | "resumes">("notes");
   const [jobNotes, setJobNotes] = useState<JobNote[]>([]);
   const [noteText, setNoteText] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
-  const [generatingCL, setGeneratingCL] = useState(false);
+  const [analysesMap, setAnalysesMap] = useState<Record<string, Analysis>>({});
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [generatingCLId, setGeneratingCLId] = useState<string | null>(null);
   const [tracking, setTracking] = useState(false);
+  const [resumes, setResumes] = useState<Resume[]>([]);
+  const [drawerResumeId, setDrawerResumeId] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<JobNote | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const inputClass =
     "bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500";
@@ -85,11 +140,27 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadAll();
+    api
+      .listResumes()
+      .then((list: Resume[]) => {
+        setResumes(list);
+      })
+      .catch(console.error);
     if (searchParams.get("new") === "true") {
       setModalOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // Close the drawer on Esc
+  useEffect(() => {
+    if (!drawerResumeId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerResumeId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerResumeId]);
 
   // Fetch notes for all jobs so search covers notes too
   useEffect(() => {
@@ -114,6 +185,15 @@ export default function JobsPage() {
       cancelled = true;
     };
   }, [jobs]);
+
+  // Keep the search index in sync when notes change on the selected job
+  useEffect(() => {
+    if (!selectedJob) return;
+    setNotesMap((prev) => ({
+      ...prev,
+      [selectedJob.id]: jobNotes.map((n) => n.note).join(" "),
+    }));
+  }, [jobNotes, selectedJob]);
 
   const allTags = Array.from(new Set(jobs.flatMap((j) => j.extracted_skills || []))).sort();
 
@@ -166,52 +246,76 @@ export default function JobsPage() {
       .catch(console.error);
   };
 
-  const fetchNotes = async (jobId: string) => {
+  const handleSelectJob = async (job: Job) => {
+    setSelectedJob(job);
+    setJobNotes([]);
     setNotesLoading(true);
+    setDrawerResumeId(null);
     try {
-      const notes = await api.listJobNotes(jobId);
-      setJobNotes(notes);
+      const [notes, analyses] = await Promise.all([
+        api.listJobNotes(job.id),
+        api.getAnalysisForJob(job.id),
+      ]);
+      setJobNotes(notes || []);
+      const map: Record<string, Analysis> = {};
+      (analyses || []).forEach((a: Analysis) => {
+        map[a.resume_id] = a;
+      });
+      setAnalysesMap(map);
+      setActiveTab(Object.keys(map).length > 0 ? "resumes" : "notes");
     } catch (e) {
-      console.error("Failed to load notes", e);
+      console.error("Failed to load job detail", e);
     } finally {
       setNotesLoading(false);
     }
   };
 
-  const handleSelectJob = async (job: Job) => {
-    setSelectedJob(job);
-    setAnalysis(null);
-    await fetchNotes(job.id);
-    // Load the saved analysis if one exists - no auto-analysis.
+  const handleAnalyze = async (resumeId: string) => {
+    if (!selectedJob) return;
+    setAnalyzingId(resumeId);
     try {
-      const analyses = await api.getAnalysisForJob(job.id);
-      if (analyses && analyses.length > 0) {
-        setAnalysis(analyses[analyses.length - 1]);
-      }
-    } catch (e) {
-      console.error("Failed to load analysis", e);
+      const result = await api.analyzeMatch(selectedJob.id, resumeId);
+      setAnalysesMap((prev) => ({ ...prev, [resumeId]: result }));
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Analysis failed - make sure you have a resume uploaded");
+    } finally {
+      setAnalyzingId(null);
     }
   };
 
-  const handleAnalyze = async (job: Job) => {
-    setAnalyzing(true);
+  const handleGenerateCoverLetter = async (analysisId: string) => {
+    setGeneratingCLId(analysisId);
     try {
-      const resume = await api.getActiveResume();
-      const result = await api.analyzeMatch(job.id, resume.id);
-      setAnalysis(result);
+      const result = await api.generateCoverLetter(analysisId);
+      setAnalysesMap((prev) => {
+        const next = { ...prev };
+        const key = Object.keys(next).find((k) => next[k].id === analysisId);
+        if (key && next[key]) {
+          next[key] = { ...next[key], cover_letter: result.cover_letter };
+        }
+        return next;
+      });
     } catch (e: any) {
-      alert(e?.response?.data?.detail || "Analysis failed - make sure you have an active resume");
+      alert(e?.response?.data?.detail || "Failed to generate cover letter");
     } finally {
-      setAnalyzing(false);
+      setGeneratingCLId(null);
     }
+  };
+
+  const handleCoverLetterClick = (analysis: Analysis) => {
+    if (analysis.cover_letter) {
+      setDrawerResumeId(analysis.resume_id);
+      return;
+    }
+    handleGenerateCoverLetter(analysis.id);
   };
 
   const handleAddNote = async () => {
     if (!selectedJob || !noteText.trim()) return;
     try {
-      await api.createJobNote(selectedJob.id, noteText.trim());
+      const note = await api.createJobNote(selectedJob.id, noteText.trim());
+      setJobNotes((prev) => [note, ...prev]);
       setNoteText("");
-      await fetchNotes(selectedJob.id);
     } catch (e: any) {
       alert(e?.response?.data?.detail || "Failed to add note");
     }
@@ -222,9 +326,23 @@ export default function JobsPage() {
     if (!confirm("Delete this note?")) return;
     try {
       await api.deleteJobNote(selectedJob.id, noteId);
-      await fetchNotes(selectedJob.id);
+      setJobNotes((prev) => prev.filter((n) => n.id !== noteId));
     } catch (e: any) {
       alert(e?.response?.data?.detail || "Failed to delete note");
+    }
+  };
+
+  const handleEditNote = async () => {
+    if (!selectedJob || !editingNote || !editText.trim()) return;
+    setEditSaving(true);
+    try {
+      const updated = await api.updateJobNote(selectedJob.id, editingNote.id, editText.trim());
+      setJobNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      setEditingNote(null);
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Failed to update note");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -235,23 +353,11 @@ export default function JobsPage() {
       setJobs((prev) => prev.filter((j) => j.id !== jobId));
       if (selectedJob?.id === jobId) {
         setSelectedJob(null);
-        setAnalysis(null);
+        setAnalysesMap({});
+        setDrawerResumeId(null);
       }
     } catch (e: any) {
       alert(e?.response?.data?.detail || "Failed to delete job");
-    }
-  };
-
-  const handleCoverLetter = async () => {
-    if (!analysis) return;
-    setGeneratingCL(true);
-    try {
-      const result = await api.generateCoverLetter(analysis.id);
-      setAnalysis((prev: any) => (prev ? { ...prev, cover_letter: result.cover_letter } : prev));
-    } catch (e: any) {
-      alert(e?.response?.data?.detail || "Failed to generate cover letter");
-    } finally {
-      setGeneratingCL(false);
     }
   };
 
@@ -275,8 +381,22 @@ export default function JobsPage() {
       ? "text-yellow-600 dark:text-yellow-400 bg-yellow-500/15"
       : "text-red-600 dark:text-red-400 bg-red-500/15";
 
+  const sortedResumes = [...resumes].sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+    const sa = analysesMap[a.id]?.match_score ?? -1;
+    const sb = analysesMap[b.id]?.match_score ?? -1;
+    if (sa !== sb) return sb - sa;
+    return a.filename.localeCompare(b.filename);
+  });
+
+  const drawerResume = drawerResumeId ? resumes.find((r) => r.id === drawerResumeId) : null;
+  const drawerAnalysis = drawerResumeId ? analysesMap[drawerResumeId] : null;
+
+  const smallBtn =
+    "inline-flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-[#c0c0c8] bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.1] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
+
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-8 max-w-[1920px]">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Jobs</h1>
@@ -342,9 +462,9 @@ export default function JobsPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-5 gap-6">
+      <div className="flex items-start gap-6">
         {/* Jobs list */}
-        <div className="col-span-2 space-y-2">
+        <div className="w-[420px] shrink-0 space-y-2">
           {filteredJobs.map((job) => (
             <div
               key={job.id}
@@ -407,18 +527,12 @@ export default function JobsPage() {
         </div>
 
         {/* Detail panel */}
-        <div className="col-span-3">
-          {analyzing && (
-            <div className="bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-xl p-8 flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
-              <p className="text-gray-500 dark:text-[#8b8b96] font-medium">Analyzing match...</p>
-            </div>
-          )}
-
-          {selectedJob && !analyzing && (
-            <div className="bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-xl p-6 space-y-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
+        <div className="flex-1 min-w-[1400px]">
+          {selectedJob ? (
+            <div className="bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-xl p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-4 mb-5">
+                <div className="min-w-0">
                   <h2 className="font-semibold text-gray-900 dark:text-white">
                     {selectedJob.title} @ {selectedJob.company}
                   </h2>
@@ -436,135 +550,212 @@ export default function JobsPage() {
                     </a>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                {!statusMap[selectedJob.id] && (
                   <button
-                    onClick={() => handleAnalyze(selectedJob)}
-                    className="text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded-lg"
+                    onClick={handleTrack}
+                    disabled={tracking}
+                    className="text-xs text-gray-900 dark:text-white bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.1] px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] disabled:opacity-50 shrink-0"
                   >
-                    Analyze Job
+                    {tracking ? "Adding..." : "Add to Tracker"}
                   </button>
-                  {!statusMap[selectedJob.id] && (
-                    <button
-                      onClick={handleTrack}
-                      disabled={tracking}
-                      className="text-xs text-gray-900 dark:text-white bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.1] px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.08] disabled:opacity-50"
-                    >
-                      {tracking ? "Adding..." : "Add to Tracker"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 dark:text-[#c0c0c8] mb-2">Job Notes</p>
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <textarea
-                        rows={3}
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                        className={inputClass + " resize-none flex-1"}
-                        placeholder="Add a note for this job..."
-                      />
-                      <button
-                        onClick={handleAddNote}
-                        disabled={!noteText.trim()}
-                        className="bg-indigo-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50"
-                      >
-                        Add
-                      </button>
-                    </div>
-                    {notesLoading ? (
-                      <p className="text-sm text-gray-500 dark:text-[#8b8b96]">Loading notes...</p>
-                    ) : jobNotes.length === 0 ? (
-                      <p className="text-sm text-gray-500 dark:text-[#8b8b96]">No notes yet for this job.</p>
-                    ) : (
-                      <div className="space-y-3 max-h-56 overflow-y-auto">
-                        {jobNotes.map((note) => (
-                          <div
-                            key={note.id}
-                            className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-3"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap">{note.note}</p>
-                              <button
-                                onClick={() => handleDeleteNote(note.id)}
-                                className="text-red-600 dark:text-red-400 text-xs hover:text-red-700 dark:hover:text-red-300"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                            <p className="text-[11px] text-gray-400 dark:text-[#6b6b72] mt-2">
-                              {new Date(note.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {analysis ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Analysis</h3>
-                      <button
-                        onClick={handleCoverLetter}
-                        disabled={generatingCL}
-                        className="text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg disabled:opacity-50"
-                      >
-                        {generatingCL ? "Generating..." : "Cover Letter"}
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-4">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-green-600 dark:text-green-400">Matching Skills</p>
-                          <span className={`text-2xl font-bold px-3 py-1 rounded-lg ${scoreColor(analysis.match_score)}`}>
-                            {analysis.match_score}%
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-3">
-                          {analysis.matching_skills.map((s: string) => (
-                            <span key={s} className="text-xs bg-green-500/15 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-4">
-                        <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">Missing Skills</p>
-                        <div className="flex flex-wrap gap-1">
-                          {analysis.missing_skills.map((s: string) => (
-                            <span key={s} className="text-xs bg-red-500/15 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      {analysis.cover_letter && (
-                        <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-4">
-                          <p className="text-xs font-semibold text-gray-900 dark:text-white mb-2">Cover Letter</p>
-                          <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap max-h-64 overflow-y-auto">
-                            {analysis.cover_letter}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-6">
-                    <p className="text-sm text-gray-500 dark:text-[#8b8b96]">
-                      Run analysis with the button above to see job match details.
-                    </p>
-                  </div>
                 )}
               </div>
-            </div>
-          )}
 
-          {!selectedJob && !analyzing && (
+              {/* Tabs */}
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-white/[0.05] rounded-lg p-1 mb-4 w-fit">
+                <button
+                  onClick={() => setActiveTab("notes")}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === "notes"
+                      ? "bg-white dark:bg-[#2a2a35] text-gray-900 dark:text-white shadow-sm"
+                      : "text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  Notes <span className="text-xs text-gray-400 dark:text-[#6b6b72]">{jobNotes.length}</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("resumes")}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === "resumes"
+                      ? "bg-white dark:bg-[#2a2a35] text-gray-900 dark:text-white shadow-sm"
+                      : "text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  Resumes <span className="text-xs text-gray-400 dark:text-[#6b6b72]">{resumes.length}</span>
+                </button>
+              </div>
+
+              {activeTab === "notes" ? (
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <textarea
+                      rows={3}
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      className={inputClass + " resize-none flex-1"}
+                      placeholder="Add a note for this job..."
+                    />
+                    <button
+                      onClick={handleAddNote}
+                      disabled={!noteText.trim()}
+                      className="bg-indigo-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 self-start"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {notesLoading ? (
+                    <p className="text-sm text-gray-500 dark:text-[#8b8b96]">Loading notes...</p>
+                  ) : jobNotes.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-[#8b8b96]">No notes yet for this job.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-[420px] overflow-y-auto">
+                      {jobNotes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-3"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap flex-1">
+                              {note.note}
+                            </p>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => {
+                                  setEditingNote(note);
+                                  setEditText(note.note);
+                                }}
+                                title="Edit note"
+                                className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-colors"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteNote(note.id)}
+                                title="Delete note"
+                                className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-gray-400 dark:text-[#6b6b72] mt-2">
+                            {new Date(note.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : resumes.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-[#0d0d14] p-10 text-center">
+                  <FileText className="w-8 h-8 mx-auto text-gray-300 dark:text-[#3a3a42] mb-2" />
+                  <p className="text-sm text-gray-500 dark:text-[#8b8b96]">
+                    No resumes — upload one to run match analysis.
+                  </p>
+                  <Link
+                    href="/resume"
+                    className="inline-block mt-3 text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    Upload a resume
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto -mx-1 px-1">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead>
+                      <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400 dark:text-[#5a5a64]">
+                        <th className="pb-2 pr-3 font-semibold">Resume</th>
+                        <th className="pb-2 pr-3 font-semibold w-14">%</th>
+                        <th className="pb-2 pr-3 font-semibold">Matching Skills</th>
+                        <th className="pb-2 pr-3 font-semibold">Missing Skills</th>
+                        <th className="pb-2 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                      {sortedResumes.map((resume) => {
+                        const analysis = analysesMap[resume.id];
+                        const isAnalyzing = analyzingId === resume.id;
+                        const isGeneratingCL = !!analysis && generatingCLId === analysis.id;
+                        return (
+                          <tr key={resume.id} className="align-top">
+                            <td className="py-3 pr-3">
+                              <p
+                                className="text-gray-900 dark:text-white text-sm font-medium truncate max-w-[180px]"
+                                title={resume.filename}
+                              >
+                                {resume.filename}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">V{resume.version}</span>
+                                {resume.is_active && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 pr-3">
+                              {analysis && analysis.match_score != null ? (
+                                <span
+                                  className={`inline-block text-sm font-bold px-2 py-0.5 rounded-lg ${scoreColor(analysis.match_score)}`}
+                                >
+                                  {Math.round(analysis.match_score)}%
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400 dark:text-[#5a5a64]">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3">
+                              <SkillPills skills={analysis?.matching_skills || []} tone="green" />
+                            </td>
+                            <td className="py-3 pr-3">
+                              <SkillPills skills={analysis?.missing_skills || []} tone="red" />
+                            </td>
+                            <td className="py-3">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {analysis ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleAnalyze(resume.id)}
+                                      disabled={isAnalyzing}
+                                      className={smallBtn}
+                                    >
+                                      {isAnalyzing && <Loader2 className="w-3 h-3 animate-spin" />}
+                                      {isAnalyzing ? "Analyzing..." : "Re-analyze"}
+                                    </button>
+                                    <button
+                                      onClick={() => handleCoverLetterClick(analysis)}
+                                      disabled={isGeneratingCL}
+                                      className={smallBtn}
+                                    >
+                                      {isGeneratingCL && <Loader2 className="w-3 h-3 animate-spin" />}
+                                      {isGeneratingCL ? "Generating..." : "Cover Letter"}
+                                    </button>
+                                    <button onClick={() => setDrawerResumeId(resume.id)} className={smallBtn}>
+                                      Details
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => handleAnalyze(resume.id)}
+                                    disabled={isAnalyzing}
+                                    className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    {isAnalyzing && <Loader2 className="w-3 h-3 animate-spin" />}
+                                    {isAnalyzing ? "Analyzing..." : "Analyze"}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
             <div className="bg-white dark:bg-[#16161f]/50 border border-dashed border-gray-200 dark:border-white/[0.1] rounded-xl p-10 text-center">
               <p className="text-gray-400 dark:text-[#5a5a64] text-sm">
                 Select a job to view notes or run match analysis.
@@ -573,6 +764,204 @@ export default function JobsPage() {
           )}
         </div>
       </div>
+
+      {/* Note edit modal */}
+      {editingNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => {
+              if (!editSaving) setEditingNote(null);
+            }}
+          />
+          <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/[0.08]">
+              <h3 className="font-semibold text-gray-900 dark:text-white">Edit Note</h3>
+              <button
+                onClick={() => {
+                  if (!editSaving) setEditingNote(null);
+                }}
+                className="p-1 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <textarea
+                rows={4}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                autoFocus
+                className={inputClass + " resize-none w-full"}
+                placeholder="Edit note..."
+              />
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleEditNote}
+                  disabled={!editText.trim() || editSaving}
+                  className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {editSaving ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditingNote(null)}
+                  disabled={editSaving}
+                  className="px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-[#c0c0c8] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resume analysis drawer */}
+      {drawerResumeId && drawerResume && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setDrawerResumeId(null)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white dark:bg-[#0b0b11] border-l border-gray-200 dark:border-white/[0.08] shadow-2xl overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-[#0b0b11] border-b border-gray-200 dark:border-white/[0.08] px-5 py-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="font-semibold text-gray-900 dark:text-white text-sm truncate" title={drawerResume.filename}>
+                  {drawerResume.filename}
+                </h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">V{drawerResume.version}</span>
+                  {drawerResume.is_active && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                      Active
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setDrawerResumeId(null)}
+                className="p-1.5 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {drawerAnalysis ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-3xl font-bold px-3 py-1 rounded-lg ${
+                        drawerAnalysis.match_score != null
+                          ? scoreColor(drawerAnalysis.match_score)
+                          : "text-gray-400 dark:text-[#5a5a64] bg-gray-100 dark:bg-white/[0.05]"
+                      }`}
+                    >
+                      {drawerAnalysis.match_score != null ? `${Math.round(drawerAnalysis.match_score)}%` : "—"}
+                    </span>
+                    <button
+                      onClick={() => handleAnalyze(drawerResumeId)}
+                      disabled={analyzingId === drawerResumeId}
+                      className={smallBtn}
+                    >
+                      {analyzingId === drawerResumeId && <Loader2 className="w-3 h-3 animate-spin" />}
+                      {analyzingId === drawerResumeId ? "Analyzing..." : "Re-analyze"}
+                    </button>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-2">Matching Skills</p>
+                    {drawerAnalysis.matching_skills.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {drawerAnalysis.matching_skills.map((s) => (
+                          <span key={s} className="text-xs bg-green-500/15 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-[#8b8b96]">None</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">Missing Skills</p>
+                    {drawerAnalysis.missing_skills.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {drawerAnalysis.missing_skills.map((s) => (
+                          <span key={s} className="text-xs bg-red-500/15 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-[#8b8b96]">None</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700 dark:text-[#c0c0c8] mb-2">Resume Suggestions</p>
+                    {drawerAnalysis.resume_suggestions.length > 0 ? (
+                      <ul className="space-y-2">
+                        {drawerAnalysis.resume_suggestions.map((s, i) => (
+                          <li key={i} className="text-sm text-gray-700 dark:text-[#c0c0c8] flex gap-2">
+                            <span className="text-indigo-500 shrink-0">{i + 1}.</span>
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-[#8b8b96]">No suggestions</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white">Cover Letter</p>
+                      <button
+                        onClick={() => handleGenerateCoverLetter(drawerAnalysis.id)}
+                        disabled={generatingCLId === drawerAnalysis.id}
+                        className={smallBtn}
+                      >
+                        {generatingCLId === drawerAnalysis.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {generatingCLId === drawerAnalysis.id
+                          ? "Generating..."
+                          : drawerAnalysis.cover_letter
+                          ? "Regenerate"
+                          : "Generate"}
+                      </button>
+                    </div>
+                    {drawerAnalysis.cover_letter ? (
+                      <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap max-h-64 overflow-y-auto">
+                        {drawerAnalysis.cover_letter}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-[#8b8b96]">No cover letter yet.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-10">
+                  <FileText className="w-8 h-8 mx-auto text-gray-300 dark:text-[#3a3a42] mb-2" />
+                  <p className="text-sm text-gray-500 dark:text-[#8b8b96]">Not analyzed yet.</p>
+                  <button
+                    onClick={() => handleAnalyze(drawerResumeId)}
+                    disabled={analyzingId === drawerResumeId}
+                    className="mt-3 inline-flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                  >
+                    {analyzingId === drawerResumeId && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {analyzingId === drawerResumeId ? "Analyzing..." : "Analyze"}
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={() => setDrawerResumeId(null)}
+                className="w-full text-sm px-4 py-2 rounded-lg text-gray-700 dark:text-[#c0c0c8] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <JobModal
         isOpen={modalOpen}
@@ -583,6 +972,3 @@ export default function JobsPage() {
     </div>
   );
 }
-
-
-

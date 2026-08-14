@@ -10,6 +10,10 @@ node_modules/
 out/
 dist/
 build/
+tsconfig.tsbuildinfo
+
+# Kilo (agent workspace state)
+.kilo/
 
 # Python
 __pycache__/

@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.1.3
+
+### Analysis per resume
+
+- Match analysis is now saved per (job, resume) pair — one analysis per resume per job
+- Re-running "Analyze Job" for the same job/resume combination updates the existing analysis in place instead of creating duplicates
+- Resume selector on the Jobs page picks which resume to analyze against (defaults to the active resume)
+- Saved analyses are shown for the selected resume; switching resumes loads that resume's analysis if one exists
+- Analysis panel displays the resume filename the results were analyzed against
+
+### Jobs detail tabs
+
+- Job detail panel now uses Notes | Resumes tabs (with counts) instead of a stacked notes + analysis layout
+- Resumes tab lists all resumes with match %, matching/missing skill pills, and per-row Analyze/Re-analyze, Cover Letter, and Details actions
+- Resumes tab sorts active resume first, then analyzed by score desc, then unanalyzed alphabetically
+- Notes tab keeps the add composer and adds inline Edit (shared modal) and Delete actions for each note
+- New drawer (slide-over) shows the full analysis for one resume: score, skills, suggestions, cover letter with Generate/Regenerate
+- Removed the single-resume selector and Analyze Job button from the job header — analysis actions now live in the Resumes tab rows
+
+### Dashboard
+
+- Stat cards are now compact squares showing count + label
+- Removed the Avg Match card
+- Added an Archived card (Rejected + Not Pursued + Ghosted combined)
+
+### Sample data
+
+- Added `sample_data/` with a ready-to-import sample dataset (10 jobs across all statuses, 3 resume versions, 12 analyses, 14 notes)
+- `sample_data/job-tracker-sample.zip` imports through the Data page (Import Backup); import replaces all current data
+- `sample_data/build_sample.py` rebuilds the zip (and resume PDFs) from `data.json`
+
 ## v1.1.2
 
 ### Jobs page

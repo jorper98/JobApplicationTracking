@@ -32,15 +32,29 @@ def analyze_job_match(data: AnalysisRequest, user: User = Depends(get_current_us
         job_skills=job.extracted_skills or [],
     )
 
-    analysis = JobAnalysis(
-        job_id=job.id,
-        resume_id=resume.id,
-        match_score=result.get("match_score"),
-        matching_skills=result.get("matching_skills", []),
-        missing_skills=result.get("missing_skills", []),
-        resume_suggestions=result.get("resume_suggestions", []),
+    # One analysis per (job, resume) pair: update in place if it already
+    # exists, otherwise create a new record. The cover letter is kept on
+    # re-analysis since it was generated for the same job and resume.
+    analysis = (
+        db.query(JobAnalysis)
+        .filter(JobAnalysis.job_id == job.id, JobAnalysis.resume_id == resume.id)
+        .first()
     )
-    db.add(analysis)
+    if analysis:
+        analysis.match_score = result.get("match_score")
+        analysis.matching_skills = result.get("matching_skills", [])
+        analysis.missing_skills = result.get("missing_skills", [])
+        analysis.resume_suggestions = result.get("resume_suggestions", [])
+    else:
+        analysis = JobAnalysis(
+            job_id=job.id,
+            resume_id=resume.id,
+            match_score=result.get("match_score"),
+            matching_skills=result.get("matching_skills", []),
+            missing_skills=result.get("missing_skills", []),
+            resume_suggestions=result.get("resume_suggestions", []),
+        )
+        db.add(analysis)
     db.commit()
     db.refresh(analysis)
     return analysis

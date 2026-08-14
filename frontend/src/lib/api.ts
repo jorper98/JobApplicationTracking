@@ -140,6 +140,10 @@ export const api = {
     const { data } = await client.post(`/api/jobs/${jobId}/notes`, { note });
     return data;
   },
+  updateJobNote: async (jobId: string, noteId: string, note: string) => {
+    const { data } = await client.patch(`/api/jobs/${jobId}/notes/${noteId}`, { note });
+    return data;
+  },
   deleteJobNote: async (jobId: string, noteId: string) => {
     const { data } = await client.delete(`/api/jobs/${jobId}/notes/${noteId}`);
     return data;
