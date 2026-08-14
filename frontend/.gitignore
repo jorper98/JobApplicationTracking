@@ -1,0 +1,15 @@
+# Environment - NEVER commit this
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next/
+out/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+todo.md
+

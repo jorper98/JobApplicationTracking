@@ -1,0 +1,36 @@
+# Environment - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+
+# Dependencies / build artifacts
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+
+# User data
+uploads/
+.data/
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+*.swp
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+devnotes/
