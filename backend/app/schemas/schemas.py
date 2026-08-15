@@ -18,11 +18,36 @@ class ResumeResponse(BaseModel):
         from_attributes = True
 
 
+# ── Company ─────────────────────────────────────────────────────────────────
+
+class CompanyCreate(BaseModel):
+    name: str = Field(min_length=1)
+    notes: Optional[str] = None
+
+
+class CompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CompanyResponse(BaseModel):
+    id: str
+    name: str
+    notes: Optional[str] = None
+    job_count: int = 0
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ── Job ───────────────────────────────────────────────────────────────────────
 
 class JobCreate(BaseModel):
     title: str
     company: str
+    company_id: Optional[str] = None
     description: Optional[str] = None
     url: Optional[str] = None
     location: Optional[str] = None
@@ -33,6 +58,7 @@ class JobCreate(BaseModel):
 class JobUpdate(BaseModel):
     title: Optional[str] = None
     company: Optional[str] = None
+    company_id: Optional[str] = None
     description: Optional[str] = None
     url: Optional[str] = None
     location: Optional[str] = None
@@ -45,6 +71,7 @@ class JobResponse(BaseModel):
     id: str
     title: str
     company: str
+    company_id: Optional[str] = None
     description: Optional[str] = None
     url: Optional[str] = None
     location: Optional[str] = None

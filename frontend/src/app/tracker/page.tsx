@@ -21,6 +21,7 @@ interface AppCard {
   job_id: string;
   title: string;
   company: string;
+  company_id?: string | null;
   location?: string;
   match_score?: number;
   applied_date?: string;
@@ -33,10 +34,16 @@ export default function TrackerPage() {
   const [board, setBoard] = useState<Board>({});
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [dragging, setDragging] = useState<{ card: AppCard; from: string } | null>(null);
 
   useEffect(() => {
     api.getKanban().then(setBoard).catch(console.error).finally(() => setLoading(false));
+    api
+      .listCompanies()
+      .then(setCompanies)
+      .catch(console.error);
   }, []);
 
   const matchesQuery = (card: AppCard) => {
@@ -45,6 +52,15 @@ export default function TrackerPage() {
     return [card.title, card.company, card.location, card.notes]
       .filter(Boolean)
       .some((value) => value!.toLowerCase().includes(q));
+  };
+
+  const matchesCompany = (card: AppCard) => {
+    if (!companyFilter) return true;
+    const selected = companies.find((c) => c.id === companyFilter);
+    return (
+      card.company_id === companyFilter ||
+      (!!selected && (card.company || "").toLowerCase() === selected.name.toLowerCase())
+    );
   };
 
   const handleDragStart = (card: AppCard, from: string) => setDragging({ card, from });
@@ -100,20 +116,45 @@ export default function TrackerPage() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Application Tracker</h1>
       <p className="text-gray-500 dark:text-[#8b8b96] mb-6">Drag cards between columns to update status</p>
 
-      <div className="relative mb-6 max-w-md">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-[#5a5a64] pointer-events-none" />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by title, company, location, or notes…"
-          className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] pl-10 pr-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
-        />
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-[#5a5a64] pointer-events-none" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by title, company, location, or notes…"
+            className="w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] pl-10 pr-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
+          />
+        </div>
+        <select
+          value={companyFilter}
+          onChange={(event) => setCompanyFilter(event.target.value)}
+          className="rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] px-3 py-2.5 text-sm text-gray-900 dark:text-white cursor-pointer outline-none focus:border-indigo-500 max-w-[220px]"
+        >
+          <option value="">All Companies</option>
+          {companies.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.name}
+            </option>
+          ))}
+        </select>
+        {(query || companyFilter) && (
+          <button
+            onClick={() => {
+              setQuery("");
+              setCompanyFilter("");
+            }}
+            className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUMNS.map(({ key, label, color }) => {
-          const cards = (board[key] || []).filter(matchesQuery);
+          const cards = (board[key] || []).filter(matchesQuery).filter(matchesCompany);
           return (
           <div
             key={key}
@@ -170,7 +211,7 @@ export default function TrackerPage() {
               ))}
               {cards.length === 0 && (
                 <div className="border-2 border-dashed border-gray-200 dark:border-white/[0.06] rounded-xl h-16 flex items-center justify-center">
-                  <p className="text-xs text-gray-400 dark:text-[#5a5a64]">{query.trim() ? "No matches" : "Drop here"}</p>
+                  <p className="text-xs text-gray-400 dark:text-[#5a5a64]">{query.trim() || companyFilter ? "No matches" : "Drop here"}</p>
                 </div>
               )}
             </div>

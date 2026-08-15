@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote
+from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company
 from app.core.config import settings
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_current_admin
 from pathlib import Path
 from datetime import datetime
 import enum as enum_module
@@ -19,6 +19,7 @@ MAX_IMPORT_FILE_MB = 200
 MAX_IMPORT_TOTAL_MB = 1024  # zip-bomb cap: total uncompressed size
 
 REQUIRED_FIELDS = {
+    "companies": ["id", "name"],
     "resumes": ["id", "filename", "file_path"],
     "jobs": ["id", "title", "company"],
     "applications": ["id", "job_id", "status"],
@@ -95,6 +96,7 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
 
     payload = {
         "users": [serialize_model(user)],
+        "companies": [serialize_model(company) for company in db.query(Company).filter(Company.user_id == user.id).all()],
         "resumes": [serialize_model(resume) for resume in resumes],
         "jobs": [serialize_model(job) for job in jobs],
         "applications": [serialize_model(app) for app in applications],
@@ -103,14 +105,14 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
     }
 
     buffer = io.BytesIO()
+    user_upload_dir = Path(settings.UPLOAD_DIR) / user.id
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("data.json", json.dumps(payload, indent=2))
 
-        upload_root = Path(settings.UPLOAD_DIR)
-        if upload_root.exists():
-            for file_path in upload_root.rglob("*"):
+        if user_upload_dir.exists():
+            for file_path in user_upload_dir.rglob("*"):
                 if file_path.is_file():
-                    archive.write(file_path, arcname=str(Path("uploads") / file_path.relative_to(upload_root)))
+                    archive.write(file_path, arcname=str(Path("uploads") / user.id / file_path.relative_to(user_upload_dir)))
 
     buffer.seek(0)
     username = (user.email or "").split("@")[0] or "user"
@@ -163,16 +165,24 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
 
     # 4. Extract uploaded files with a zip-slip guard (before the DB transaction)
     try:
+        zip_basenames = set()
         for info in archive.infolist():
             if info.is_dir() or not info.filename.startswith("uploads/"):
                 continue
             basename = Path(info.filename).name
+            zip_basenames.add(basename)
             target_path = (user_upload_dir / basename).resolve()
             if not target_path.is_relative_to(user_upload_dir.resolve()):
                 raise HTTPException(status_code=400, detail="Archive contains paths outside the upload directory")
             target_path.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as source, open(target_path, "wb") as sink:
                 sink.write(source.read())
+
+        # Remove orphaned files not in the zip
+        if user_upload_dir.exists():
+            for existing in user_upload_dir.iterdir():
+                if existing.is_file() and existing.name not in zip_basenames:
+                    existing.unlink()
     except HTTPException:
         raise
     except Exception:
@@ -187,10 +197,27 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         db.query(Application).filter(Application.user_id == user.id).delete()
         db.query(Resume).filter(Resume.user_id == user.id).delete()
         db.query(Job).filter(Job.user_id == user.id).delete()
+        db.query(Company).filter(Company.user_id == user.id).delete()
+        db.flush()
+
+        # Companies first so jobs can be linked by name
+        companies_by_name = {}
+        for row in payload.get("companies", []):
+            sanitized = sanitize_row(row)
+            if not sanitized.get("name"):
+                continue
+            company = Company(**{**filter_columns(Company, sanitized), "user_id": user.id})
+            db.add(company)
+            companies_by_name[sanitized["name"].strip().lower()] = company
         db.flush()
 
         for row in payload.get("jobs", []):
-            db.add(Job(**{**filter_columns(Job, sanitize_row(row)), "user_id": user.id}))
+            job_row = {**filter_columns(Job, sanitize_row(row)), "user_id": user.id}
+            job_row.pop("company_id", None)
+            company_name = (job_row.get("company") or "").strip().lower()
+            if company_name in companies_by_name:
+                job_row["company_id"] = companies_by_name[company_name].id
+            db.add(Job(**job_row))
 
         for row in payload.get("resumes", []):
             sanitized = sanitize_row(row)
@@ -213,6 +240,168 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         print("Data import failed, changes rolled back:", exc)
         raise HTTPException(status_code=500, detail="Import failed — no changes were applied")
 
+@router.get("/system-backup")
+def system_backup(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Admin-only: full system backup of ALL users' data and uploaded files."""
+    users = db.query(User).order_by(User.created_at).all()
+    user_ids = [u.id for u in users]
+    jobs = db.query(Job).filter(Job.user_id.in_(user_ids)).all() if user_ids else []
+    job_ids = [j.id for j in jobs]
+    payload = {
+        "users": [serialize_model(u) for u in users],
+        "companies": [serialize_model(c) for c in db.query(Company).filter(Company.user_id.in_(user_ids)).all()] if user_ids else [],
+        "resumes": [serialize_model(r) for r in db.query(Resume).filter(Resume.user_id.in_(user_ids)).all()] if user_ids else [],
+        "jobs": [serialize_model(j) for j in jobs],
+        "applications": [serialize_model(a) for a in db.query(Application).filter(Application.user_id.in_(user_ids)).all()] if user_ids else [],
+        "analyses": [serialize_model(a) for a in db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).all()] if job_ids else [],
+        "notes": [serialize_model(n) for n in db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).all()] if job_ids else [],
+    }
+
+    buffer = io.BytesIO()
+    upload_root = Path(settings.UPLOAD_DIR)
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("data.json", json.dumps(payload, indent=2))
+        if upload_root.exists():
+            for file_path in upload_root.rglob("*"):
+                if file_path.is_file():
+                    archive.write(file_path, arcname=str(Path("uploads") / file_path.relative_to(upload_root)))
+
+    buffer.seek(0)
+    filename = f"system-backup-{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.post("/system-restore")
+async def system_restore(file: UploadFile = File(...), admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Admin-only: restore a full system backup, replacing ALL users' data."""
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Upload a .zip archive")
+
+    limit_bytes = MAX_IMPORT_FILE_MB * 1024 * 1024
+    content = await file.read(limit_bytes + 1)
+    if len(content) > limit_bytes:
+        raise HTTPException(status_code=400, detail=f"File too large (max {MAX_IMPORT_FILE_MB}MB)")
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid zip archive")
+
+    total_uncompressed = sum(info.file_size for info in archive.infolist())
+    if total_uncompressed > MAX_IMPORT_TOTAL_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Archive expands beyond {MAX_IMPORT_TOTAL_MB}MB — refusing to restore")
+
+    if "data.json" not in archive.namelist():
+        raise HTTPException(status_code=400, detail="Archive must contain data.json")
+
+    try:
+        payload = json.loads(archive.read("data.json").decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not parse data.json")
+
+    validate_payload(payload)
+    users_payload = payload.get("users")
+    if not isinstance(users_payload, list) or len(users_payload) == 0:
+        raise HTTPException(status_code=400, detail="Backup contains no user accounts — refusing to restore")
+    for row in users_payload:
+        if not isinstance(row, dict) or not row.get("id") or not row.get("email") or not row.get("password_hash"):
+            raise HTTPException(status_code=400, detail="Backup users are missing required fields")
+
+    upload_root = Path(settings.UPLOAD_DIR)
+    staging = Path(str(upload_root) + ".restore-tmp")
+
+    # 1. Extract uploaded files into a staging dir (full tree, zip-slip guard)
+    try:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        for info in archive.infolist():
+            if info.is_dir() or not info.filename.startswith("uploads/"):
+                continue
+            rel = Path(info.filename).relative_to("uploads")
+            target = (staging / rel).resolve()
+            if not target.is_relative_to(staging.resolve()):
+                raise HTTPException(status_code=400, detail="Archive contains paths outside the upload directory")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(info) as source, open(target, "wb") as sink:
+                sink.write(source.read())
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not extract archive contents")
+
+    # 2. Replace ALL data in a single transaction
+    try:
+        db.query(JobAnalysis).delete()
+        db.query(JobNote).delete()
+        db.query(Application).delete()
+        db.query(Resume).delete()
+        db.query(Job).delete()
+        db.query(Company).delete()
+        db.query(User).delete()
+        db.flush()
+
+        for row in users_payload:
+            db.add(User(**filter_columns(User, sanitize_row(row))))
+        db.flush()
+
+        companies_by_id = {}
+        for row in payload.get("companies", []):
+            sanitized = sanitize_row(row)
+            if not sanitized.get("id") or not sanitized.get("name"):
+                continue
+            company = Company(**filter_columns(Company, sanitized))
+            db.add(company)
+            companies_by_id[company.id] = company
+        db.flush()
+
+        for row in payload.get("jobs", []):
+            job_row = filter_columns(Job, sanitize_row(row))
+            if job_row.get("company_id") and job_row["company_id"] not in companies_by_id:
+                job_row["company_id"] = None
+            db.add(Job(**job_row))
+        db.flush()
+
+        for row in payload.get("resumes", []):
+            sanitized = sanitize_row(row)
+            if sanitized.get("file_path"):
+                rel_parts = [p for p in Path(sanitized["file_path"]).parts if p not in ("..", ".", "")]
+                if rel_parts and (upload_root / Path(*rel_parts)).resolve().is_relative_to(upload_root.resolve()):
+                    sanitized["file_path"] = str(upload_root / Path(*rel_parts))
+                else:
+                    sanitized["file_path"] = None
+            db.add(Resume(**filter_columns(Resume, sanitized)))
+        db.flush()
+
+        for row in payload.get("analyses", []):
+            db.add(JobAnalysis(**filter_columns(JobAnalysis, sanitize_row(row))))
+        for row in payload.get("notes", []):
+            db.add(JobNote(**filter_columns(JobNote, sanitize_row(row))))
+        for row in payload.get("applications", []):
+            db.add(Application(**filter_columns(Application, sanitize_row(row))))
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        print("System restore failed, changes rolled back:", exc)
+        raise HTTPException(status_code=500, detail="Restore failed — no changes were applied")
+
+    # 3. Swap uploads: replace the live folder with the extracted staging tree
+    try:
+        if upload_root.exists():
+            shutil.rmtree(upload_root, ignore_errors=True)
+        staging.rename(upload_root)
+    except Exception as exc:
+        print("System restore: uploads swap failed:", exc)
+        raise HTTPException(status_code=500, detail="Restore failed during uploads swap — re-upload the backup")
+
+    return {"message": "System restore complete"}
+
     return {"message": "Data import complete"}
 
 
@@ -233,5 +422,9 @@ def clear_data(user: User = Depends(get_current_user), db: Session = Depends(get
     user_upload_dir = Path(settings.UPLOAD_DIR) / user.id
     if user_upload_dir.exists():
         shutil.rmtree(user_upload_dir, ignore_errors=True)
+
+    # Remove company records for this user
+    db.query(Company).filter(Company.user_id == user.id).delete()
+    db.commit()
 
     return {"message": "All data cleared"}

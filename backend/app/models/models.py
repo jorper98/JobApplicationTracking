@@ -37,6 +37,7 @@ class User(Base):
     resumes = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
     applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
     jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan")
+    companies = relationship("Company", back_populates="user", cascade="all, delete-orphan")
 
 
 class Resume(Base):
@@ -56,11 +57,26 @@ class Resume(Base):
     analyses = relationship("JobAnalysis", back_populates="resume")
 
 
+class Company(Base):
+    __tablename__ = "companies"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="companies")
+    jobs = relationship("Job", back_populates="company_record")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=True, index=True)
     title = Column(String, nullable=False)
     company = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -76,6 +92,7 @@ class Job(Base):
     analyses = relationship("JobAnalysis", back_populates="job", cascade="all, delete-orphan")
     notes = relationship("JobNote", back_populates="job", cascade="all, delete-orphan")
     user = relationship("User", back_populates="jobs")
+    company_record = relationship("Company", back_populates="jobs")
 
 
 class JobNote(Base):

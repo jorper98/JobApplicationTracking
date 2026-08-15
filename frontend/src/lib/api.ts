@@ -111,6 +111,7 @@ export const api = {
   createJob: async (job: {
     title: string;
     company: string;
+    company_id?: string;
     description?: string;
     url?: string;
     location?: string;
@@ -121,6 +122,7 @@ export const api = {
   updateJob: async (id: string, job: {
     title?: string;
     company?: string;
+    company_id?: string | null;
     description?: string;
     url?: string;
     location?: string;
@@ -154,6 +156,30 @@ export const api = {
     return data;
   },
 
+  // Companies
+  listCompanies: async (search?: string) => {
+    const { data } = await client.get("/api/companies/", {
+      params: search && search.trim().length >= 2 ? { search } : {},
+    });
+    return data;
+  },
+  getCompany: async (id: string) => {
+    const { data } = await client.get(`/api/companies/${id}`);
+    return data;
+  },
+  createCompany: async (payload: { name: string; notes?: string }) => {
+    const { data } = await client.post("/api/companies/", payload);
+    return data;
+  },
+  updateCompany: async (id: string, payload: { name?: string; notes?: string }) => {
+    const { data } = await client.patch(`/api/companies/${id}`, payload);
+    return data;
+  },
+  deleteCompany: async (id: string) => {
+    const { data } = await client.delete(`/api/companies/${id}`);
+    return data;
+  },
+
   exportData: async () => {
     const response = await client.get("/api/data/export", {
       responseType: "blob",
@@ -170,6 +196,22 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     const { data } = await client.post("/api/data/import", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+  },
+
+  // Admin: full system backup / restore
+  systemBackup: async () => {
+    const response = await client.get("/api/data/system-backup", {
+      responseType: "blob",
+    });
+    return response.data;
+  },
+  systemRestore: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await client.post("/api/data/system-restore", form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return data;

@@ -68,6 +68,7 @@ def get_kanban(user: User = Depends(get_current_user), db: Session = Depends(get
             "job_id": app.job_id,
             "title": job.title if job else "Unknown",
             "company": job.company if job else "Unknown",
+            "company_id": job.company_id if job else None,
             "location": job.location if job else None,
             "match_score": app.match_score,
             "applied_date": app.applied_date.isoformat() if app.applied_date else None,

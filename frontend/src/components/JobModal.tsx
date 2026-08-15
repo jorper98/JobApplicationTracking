@@ -1,14 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { X, Link2, FileText } from "lucide-react";
+import { X, Link2, FileText, Building2, Check } from "lucide-react";
 
 interface JobModalProps {
   isOpen: boolean;
   onClose: () => void;
   job?: any;
   onSave: (job: any) => void;
+}
+
+interface Company {
+  id: string;
+  name: string;
+  notes?: string | null;
+  job_count?: number;
 }
 
 type ModalMode = "manual" | "url";
@@ -30,8 +37,19 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const [companySuggestions, setCompanySuggestions] = useState<Company[]>([]);
+  const [companySearching, setCompanySearching] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [companyNotes, setCompanyNotes] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (isOpen) {
+      setCompanySuggestions([]);
+      setSuggestionsOpen(false);
+      setSelectedCompany(null);
+      setCompanyNotes("");
       if (job) {
         setForm({
           title: job.title || "",
@@ -41,6 +59,15 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
           location: job.location || "",
           createdAt: job.created_at ? new Date(job.created_at).toISOString().slice(0,10) : "",
         });
+        if (job.company_id) {
+          api
+            .getCompany(job.company_id)
+            .then((company) => {
+              setSelectedCompany(company);
+              setCompanyNotes(company.notes || "");
+            })
+            .catch(console.error);
+        }
         setMode("manual");
       } else {
         setForm({ title: "", company: "", description: "", url: "", location: "", createdAt: "" });
@@ -51,6 +78,64 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
       }
     }
   }, [isOpen, job]);
+
+  const handleCompanyChange = (value: string) => {
+    setForm({ ...form, company: value });
+    if (selectedCompany && value.trim().toLowerCase() !== selectedCompany.name.toLowerCase()) {
+      setSelectedCompany(null);
+    }
+    const q = value.trim();
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.length < 2) {
+      setCompanySuggestions([]);
+      setSuggestionsOpen(false);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      setCompanySearching(true);
+      try {
+        const results = await api.listCompanies(q);
+        setCompanySuggestions(results);
+        setSuggestionsOpen(true);
+      } catch (e) {
+        console.error("Company search failed", e);
+        setCompanySuggestions([]);
+      } finally {
+        setCompanySearching(false);
+      }
+    }, 250);
+  };
+
+  const handleSelectCompany = (company: Company) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    setForm({ ...form, company: company.name });
+    setSelectedCompany(company);
+    setCompanyNotes(company.notes || "");
+    setCompanySuggestions([]);
+    setSuggestionsOpen(false);
+  };
+
+  const resolveCompany = async (): Promise<string | null> => {
+    if (selectedCompany) {
+      if (companyNotes.trim() !== (selectedCompany.notes || "")) {
+        try {
+          await api.updateCompany(selectedCompany.id, { notes: companyNotes.trim() });
+        } catch (e) {
+          console.error("Failed to save company notes", e);
+        }
+      }
+      return selectedCompany.id;
+    }
+    const name = form.company.trim();
+    if (!name) return null;
+    try {
+      const company = await api.createCompany({ name, notes: companyNotes.trim() });
+      return company.id;
+    } catch (e) {
+      console.error("Failed to create company", e);
+      return null;
+    }
+  };
 
   const handleScrape = async () => {
     if (!urlInput.trim()) return;
@@ -74,7 +159,8 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
     setSubmitting(true);
     setError("");
     try {
-      const payload = { ...form };
+      const companyId = await resolveCompany();
+      const payload = { ...form, company_id: companyId ?? undefined };
       let savedJob;
       if (job) {
         savedJob = await api.updateJob(job.id, { ...payload, created_at: form.createdAt ? new Date(form.createdAt).toISOString() : null });
@@ -179,7 +265,67 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
               </div>
               <div>
                 <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Company *</label>
-                <input type="text" required value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="e.g. Acme Corp" className={inputClass} />
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                    <Building2 className="w-4 h-4 text-gray-400 dark:text-[#5a5a64]" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={form.company}
+                    onChange={(e) => handleCompanyChange(e.target.value)}
+                    onFocus={() => {
+                      if (companySuggestions.length > 0) setSuggestionsOpen(true);
+                    }}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
+                    placeholder="e.g. Acme Corp (type 2+ letters to search)"
+                    className={inputClass + " pl-9"}
+                  />
+                  {companySearching && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-[#5a5a64]">Searching…</span>
+                  )}
+                  {suggestionsOpen && companySuggestions.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] shadow-lg">
+                      {companySuggestions.map((company) => (
+                        <button
+                          key={company.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectCompany(company);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                        >
+                          <Building2 className="w-3.5 h-3.5 text-gray-400 dark:text-[#5a5a64] shrink-0" />
+                          <span className="flex-1 truncate">{company.name}</span>
+                          {typeof company.job_count === "number" && company.job_count > 0 && (
+                            <span className="text-xs text-gray-400 dark:text-[#5a5a64] shrink-0">{company.job_count} job{company.job_count !== 1 ? "s" : ""}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {suggestionsOpen && form.company.trim().length >= 2 && companySuggestions.length === 0 && !companySearching && (
+                    <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] shadow-lg px-3 py-2.5 text-sm text-gray-500 dark:text-[#8b8b96]">
+                      No existing company — a new record for “{form.company.trim()}” will be created when you save.
+                    </div>
+                  )}
+                </div>
+                {(selectedCompany || form.company.trim().length >= 2) && (
+                  <div className="mt-3">
+                    <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">
+                      Company notes
+                      {selectedCompany && <span className="ml-1.5 text-xs text-emerald-600 dark:text-emerald-400"><Check className="inline w-3 h-3" /> Existing record</span>}
+                    </label>
+                    <textarea
+                      value={companyNotes}
+                      onChange={(e) => setCompanyNotes(e.target.value)}
+                      placeholder="Contacts, application portal details, interview notes, etc."
+                      rows={3}
+                      className={inputClass + " resize-none"}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Location</label>

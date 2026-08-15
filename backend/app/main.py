@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func
 from app.core.config import settings
-from app.api.routes import auth, admin, resume, jobs, applications, analysis, data
+from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies
 from app.db.database import engine, Base
 from app.models import models  # ensures all models are registered with Base
 
@@ -126,6 +126,51 @@ def on_startup():
         print("Saved-application backfill failed:", exc)
     # Creates any tables that do not exist yet (safe to run repeatedly)
     Base.metadata.create_all(bind=engine)
+    # Ensure jobs.company_id exists, then backfill company records from the
+    # company name stored on each job.
+    try:
+        inspector = inspect(engine)
+        if "jobs" in inspector.get_table_names():
+            columns = {col["name"] for col in inspector.get_columns("jobs")}
+            if "company_id" not in columns:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE jobs ADD COLUMN company_id VARCHAR"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_jobs_company_id ON jobs (company_id)"
+                    ))
+    except Exception as exc:
+        print("jobs.company_id schema check failed:", exc)
+    try:
+        from app.db.database import SessionLocal
+        from app.models.models import Company
+        db = SessionLocal()
+        try:
+            rows = db.execute(text(
+                "SELECT j.user_id, j.company FROM jobs j "
+                "WHERE j.user_id IS NOT NULL AND j.company IS NOT NULL "
+                "AND j.company_id IS NULL GROUP BY j.user_id, j.company"
+            )).fetchall()
+            for user_id, company_name in rows:
+                existing = db.query(Company).filter(
+                    Company.user_id == user_id,
+                    func.lower(Company.name) == company_name.strip().lower(),
+                ).first()
+                if not existing:
+                    existing = Company(user_id=user_id, name=company_name.strip())
+                    db.add(existing)
+                    db.flush()
+                db.execute(text(
+                    "UPDATE jobs SET company_id = :cid WHERE user_id = :uid AND company_id IS NULL AND company = :name"
+                ), {"cid": existing.id, "uid": user_id, "name": company_name})
+            db.commit()
+            print(f"Company backfill complete: {len(rows)} company name(s) processed")
+        except Exception as exc:
+            db.rollback()
+            print("Company backfill failed:", exc)
+        finally:
+            db.close()
+    except Exception as exc:
+        print("Company backfill setup failed:", exc)
 
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
@@ -133,6 +178,7 @@ app.include_router(admin.router, prefix="/api/users", tags=["Users"])
 app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(applications.router, prefix="/api/applications", tags=["Applications"])
+app.include_router(companies.router, prefix="/api/companies", tags=["Companies"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(data.router, prefix="/api/data", tags=["Data"])
 

@@ -4,6 +4,7 @@ from app.db.database import get_db
 from app.models.models import Job, JobNote, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text
+from app.api.routes.companies import get_or_create_company
 from app.core.auth import get_current_user
 from typing import List
 
@@ -15,6 +16,21 @@ def _get_owned_job(db: Session, user: User, job_id: str) -> Job:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+def _resolve_company_id(db: Session, user: User, company_id, company_name) -> str:
+    """Validate an explicit company_id, or auto-create a company from the name."""
+    from app.models.models import Company
+    if company_id:
+        company = db.query(Company).filter(Company.id == company_id, Company.user_id == user.id).first()
+        if not company:
+            raise HTTPException(status_code=400, detail="Company not found")
+        return company_id
+    if company_name:
+        company = get_or_create_company(db, user.id, company_name)
+        if company:
+            return company.id
+    return None
 
 
 @router.post("/", response_model=JobResponse)
@@ -35,6 +51,7 @@ def create_job(job_data: JobCreate, user: User = Depends(get_current_user), db: 
         user_id=user.id,
         title=job_data.title,
         company=job_data.company,
+        company_id=_resolve_company_id(db, user, job_data.company_id, job_data.company),
         description=job_data.description,
         url=job_data.url,
         location=job_data.location,
@@ -70,6 +87,12 @@ def update_job(job_id: str, job_data: JobUpdate, user: User = Depends(get_curren
     for field, value in update_data.items():
         # Ignore explicit nulls for required fields (avoids NOT NULL constraint errors)
         if value is None and field in ("title", "company"):
+            continue
+        if field == "company_id":
+            if value is None:
+                job.company_id = None
+            else:
+                job.company_id = _resolve_company_id(db, user, value, job.company)
             continue
         setattr(job, field, value)
 
@@ -148,10 +171,12 @@ def create_job_from_url(payload: dict, user: User = Depends(get_current_user), d
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
 
     # 3. Save the job
+    extracted_company = extracted.get("company") or "Unknown"
     job = Job(
         user_id=user.id,
         title=extracted.get("title") or "Untitled Role",
-        company=extracted.get("company") or "Unknown",
+        company=extracted_company,
+        company_id=_resolve_company_id(db, user, None, extracted_company),
         description=extracted.get("description"),
         location=extracted.get("location"),
         url=url,

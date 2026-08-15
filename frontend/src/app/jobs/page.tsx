@@ -11,6 +11,7 @@ interface Job {
   id: string;
   title: string;
   company: string;
+  company_id?: string | null;
   description?: string;
   url?: string;
   location?: string;
@@ -102,6 +103,8 @@ export default function JobsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
 
@@ -147,6 +150,10 @@ export default function JobsPage() {
       .then((list: Resume[]) => {
         setResumes(list);
       })
+      .catch(console.error);
+    api
+      .listCompanies()
+      .then(setCompanies)
       .catch(console.error);
     if (searchParams.get("new") === "true") {
       setModalOpen(true);
@@ -225,6 +232,13 @@ export default function JobsPage() {
   const filteredJobs = jobs.filter((job) => {
     if (statusFilter && (statusMap[job.id] || "saved") !== statusFilter) return false;
     if (tagFilter && !(job.extracted_skills || []).includes(tagFilter)) return false;
+    if (companyFilter) {
+      const selected = companies.find((c) => c.id === companyFilter);
+      const matchesCompany =
+        job.company_id === companyFilter ||
+        (!!selected && (job.company || "").toLowerCase() === selected.name.toLowerCase());
+      if (!matchesCompany) return false;
+    }
     const q = search.trim().toLowerCase();
     if (!q) return true;
     const haystack = [
@@ -257,6 +271,10 @@ export default function JobsPage() {
     } else {
       setJobs((prev) => [savedJob, ...prev]);
     }
+    api
+      .listCompanies()
+      .then(setCompanies)
+      .catch(console.error);
     api
       .getKanban()
       .then((board: Record<string, { job_id: string }[]>) => {
@@ -469,6 +487,18 @@ export default function JobsPage() {
           ))}
         </select>
         <select
+          value={companyFilter}
+          onChange={(e) => setCompanyFilter(e.target.value)}
+          className={inputClass + " cursor-pointer max-w-[200px]"}
+        >
+          <option value="">All Companies</option>
+          {companies.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.name}
+            </option>
+          ))}
+        </select>
+        <select
           value={tagFilter}
           onChange={(e) => setTagFilter(e.target.value)}
           className={inputClass + " cursor-pointer max-w-[200px]"}
@@ -480,12 +510,13 @@ export default function JobsPage() {
             </option>
           ))}
         </select>
-        {(search || statusFilter || tagFilter) && (
+        {(search || statusFilter || tagFilter || companyFilter) && (
           <button
             onClick={() => {
               setSearch("");
               setStatusFilter("");
               setTagFilter("");
+              setCompanyFilter("");
             }}
             className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors"
           >

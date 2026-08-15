@@ -2,10 +2,29 @@
 
 ## v1.1.5
 
+### Admin system backup
+
+- Admin-only full system backup: downloads a zip with ALL users' data (accounts, companies, jobs, resumes, applications, analyses, notes) and all uploaded files
+- Admin-only system restore: replaces all data for all users, including accounts (you may need to log in again after a restore)
+- Data export now includes only the logged-in user's uploaded files; import removes orphaned upload files
+
+### Companies
+
+- New Company records with notes, created automatically from the company name when entering a job
+- Company autocomplete in the Add/Edit Job modal: typing 2+ letters searches existing records; pick one or a new record is created on save
+- Company notes editable in the job modal; company records backfilled from existing jobs on startup
+- Company filter dropdown on the Jobs page and Tracker kanban
+- Companies included in data export/import
+
 ### Jobs page
 
 - Job detail header now shows the date the job was added, with a pencil icon to edit it
 - Edit Job modal has a new Date added field; supports backdating historical entries
+
+### Deployment
+
+- Distribution zip now ships `docker-compose.prod.example.yml` instead of `docker-compose.prod.yml`
+- Upgrades are in-place: unzip over the existing install folder; the live compose file and `.env.prod` are never overwritten
 
 ## v1.1.4
 
