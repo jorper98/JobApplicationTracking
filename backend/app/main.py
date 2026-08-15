@@ -9,7 +9,7 @@ from app.models import models  # ensures all models are registered with Base
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.1.3",
+    version="1.1.4",
 )
 
 app.add_middleware(

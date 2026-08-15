@@ -21,7 +21,7 @@ export function Header() {
               JobApplicationTracker
             </span>
             <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">
-              v1.1.3
+              v1.1.4
             </span>
           </div>
         </Link>

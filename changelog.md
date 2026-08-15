@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.4
+
+### Jobs page
+
+- Jobs page now uses a wider layout — the detail panel (Notes | Resumes tabs) is at least 1400px, and the page grows up to 1920px on large monitors
+- Header title and version now link to the Dashboard
+- Fixed: job search now filters by note content immediately after notes are added, edited, or deleted (search index stays in sync)
+
 ## v1.1.3
 
 ### Analysis per resume

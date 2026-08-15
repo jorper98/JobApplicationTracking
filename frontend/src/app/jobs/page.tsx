@@ -115,6 +115,7 @@ export default function JobsPage() {
   const [tracking, setTracking] = useState(false);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [drawerResumeId, setDrawerResumeId] = useState<string | null>(null);
+  const [coverLetterResumeId, setCoverLetterResumeId] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<JobNote | null>(null);
   const [editText, setEditText] = useState("");
   const [editSaving, setEditSaving] = useState(false);
@@ -161,6 +162,16 @@ export default function JobsPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerResumeId]);
+
+  // Close the cover letter modal on Esc
+  useEffect(() => {
+    if (!coverLetterResumeId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCoverLetterResumeId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [coverLetterResumeId]);
 
   // Fetch notes for all jobs so search covers notes too
   useEffect(() => {
@@ -251,6 +262,7 @@ export default function JobsPage() {
     setJobNotes([]);
     setNotesLoading(true);
     setDrawerResumeId(null);
+    setCoverLetterResumeId(null);
     try {
       const [notes, analyses] = await Promise.all([
         api.listJobNotes(job.id),
@@ -283,18 +295,21 @@ export default function JobsPage() {
     }
   };
 
-  const handleGenerateCoverLetter = async (analysisId: string) => {
+  const handleGenerateCoverLetter = async (analysisId: string, openModalAfter = false) => {
     setGeneratingCLId(analysisId);
     try {
       const result = await api.generateCoverLetter(analysisId);
+      let resumeId: string | null = null;
       setAnalysesMap((prev) => {
         const next = { ...prev };
         const key = Object.keys(next).find((k) => next[k].id === analysisId);
         if (key && next[key]) {
+          resumeId = next[key].resume_id;
           next[key] = { ...next[key], cover_letter: result.cover_letter };
         }
         return next;
       });
+      if (openModalAfter && resumeId) setCoverLetterResumeId(resumeId);
     } catch (e: any) {
       alert(e?.response?.data?.detail || "Failed to generate cover letter");
     } finally {
@@ -302,12 +317,12 @@ export default function JobsPage() {
     }
   };
 
-  const handleCoverLetterClick = (analysis: Analysis) => {
+  const handleCoverLetterClick = async (analysis: Analysis) => {
     if (analysis.cover_letter) {
-      setDrawerResumeId(analysis.resume_id);
+      setCoverLetterResumeId(analysis.resume_id);
       return;
     }
-    handleGenerateCoverLetter(analysis.id);
+    await handleGenerateCoverLetter(analysis.id, true);
   };
 
   const handleAddNote = async () => {
@@ -391,6 +406,9 @@ export default function JobsPage() {
 
   const drawerResume = drawerResumeId ? resumes.find((r) => r.id === drawerResumeId) : null;
   const drawerAnalysis = drawerResumeId ? analysesMap[drawerResumeId] : null;
+
+  const clResume = coverLetterResumeId ? resumes.find((r) => r.id === coverLetterResumeId) : null;
+  const clAnalysis = coverLetterResumeId ? analysesMap[coverLetterResumeId] : null;
 
   const smallBtn =
     "inline-flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-[#c0c0c8] bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.1] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
@@ -811,6 +829,76 @@ export default function JobsPage() {
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cover letter modal */}
+      {coverLetterResumeId && clResume && clAnalysis && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setCoverLetterResumeId(null)} />
+          <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-200 dark:border-white/[0.08] shrink-0">
+              <div className="min-w-0">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Cover Letter</h3>
+                <p className="text-xs text-gray-500 dark:text-[#8b8b96] truncate" title={clResume.filename}>
+                  {clResume.filename} — {selectedJob?.title} @ {selectedJob?.company}
+                </p>
+              </div>
+              <button
+                onClick={() => setCoverLetterResumeId(null)}
+                className="p-1 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4">
+              {clAnalysis.matching_skills && clAnalysis.matching_skills.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-2">Matching Skills</p>
+                  <div className="flex flex-wrap gap-1">
+                    {clAnalysis.matching_skills.map((s) => (
+                      <span key={s} className="text-xs bg-green-500/15 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {clAnalysis.missing_skills && clAnalysis.missing_skills.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">Missing Skills</p>
+                  <div className="flex flex-wrap gap-1">
+                    {clAnalysis.missing_skills.map((s) => (
+                      <span key={s} className="text-xs bg-red-500/15 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap leading-relaxed">
+                  {clAnalysis.cover_letter || "No cover letter yet."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-white/[0.08] shrink-0">
+              <button
+                onClick={() => handleGenerateCoverLetter(clAnalysis.id)}
+                disabled={generatingCLId === clAnalysis.id}
+                className={smallBtn}
+              >
+                {generatingCLId === clAnalysis.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                {generatingCLId === clAnalysis.id ? "Generating..." : "Regenerate"}
+              </button>
+              <button
+                onClick={() => setCoverLetterResumeId(null)}
+                className="px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-[#c0c0c8] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
