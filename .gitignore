@@ -38,3 +38,8 @@ uploads/
 .DS_Store
 
 devnotes/
+# Distribution / packaging
+*.zip
+dist-staging/
+# Distribution / release packages
+distribution/

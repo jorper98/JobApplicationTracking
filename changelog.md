@@ -2,6 +2,13 @@
 
 ## v1.1.4
 
+### Deployment
+
+- Added production deployment files: ackend/Dockerfile.prod, rontend/Dockerfile.prod, and the production compose file
+- Added distribution/ folder for release packaging (gitignored; contains compose, env template, build script, and generated zip)
+- Added distribution/create-distribution.ps1 to build jobtracker-distribution-v{version}.zip for server deployment
+- Production compose exposes backend/frontend ports for Nginx Proxy Manager bridge access and uses hardened Docker images
+
 ### Jobs page
 
 - Jobs page now uses a wider layout — the detail panel (Notes | Resumes tabs) is at least 1400px, and the page grows up to 1920px on large monitors
