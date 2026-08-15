@@ -202,6 +202,14 @@ Please ensure your code follows the existing style and includes appropriate test
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## AI Disclaimer
+
+This codebase was developed with the assistance of AI tools. Portions of the code - including features, bug fixes, and documentation - were generated, reviewed, and refined with the help of AI assistants and should be treated accordingly.
+
+- AI-generated code should be reviewed and tested before production use, just like any other contribution
+- The author reviewed and verified the AI-assisted work, but no warranty is provided beyond the MIT License terms
+- No confidential or proprietary data was intentionally used to train or prompt the AI models
+
 ## Author
 
 **Jorge Pereira**  
