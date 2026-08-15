@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.5
+
+### Jobs page
+
+- Job detail header now shows the date the job was added, with a pencil icon to edit it
+- Edit Job modal has a new Date added field; supports backdating historical entries
+
 ## v1.1.4
 
 ### Deployment

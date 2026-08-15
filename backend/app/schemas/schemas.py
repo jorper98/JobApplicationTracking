@@ -38,6 +38,7 @@ class JobUpdate(BaseModel):
     location: Optional[str] = None
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
+    created_at: Optional[datetime] = None
 
 
 class JobResponse(BaseModel):

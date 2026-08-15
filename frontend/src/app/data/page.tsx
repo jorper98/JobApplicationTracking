@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { DownloadCloud, UploadCloud, Trash2 } from "lucide-react";
 
 export default function DataPage() {
+  const { user } = useAuth();
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -15,10 +17,16 @@ export default function DataPage() {
     setMessage(null);
     try {
       const blob = await api.exportData();
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+      const username = (user?.email?.split("@")[0] || user?.full_name || "user")
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "");
       const url = window.URL.createObjectURL(new Blob([blob], { type: "application/zip" }));
       const link = document.createElement("a");
       link.href = url;
-      link.download = "job-tracker-export.zip";
+      link.download = `${username}-${timestamp}-job-tracker-export.zip`;
       document.body.appendChild(link);
       link.click();
       link.remove();

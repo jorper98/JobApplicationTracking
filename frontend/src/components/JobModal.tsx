@@ -15,12 +15,13 @@ type ModalMode = "manual" | "url";
 
 export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
   const [mode, setMode] = useState<ModalMode>("manual");
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{ title: string; company: string; description: string; url: string; location: string; createdAt: string }>({
     title: "",
     company: "",
     description: "",
     url: "",
     location: "",
+    createdAt: "",
   });
   const [urlInput, setUrlInput] = useState("");
   const [scraping, setScraping] = useState(false);
@@ -38,10 +39,11 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
           description: job.description || "",
           url: job.url || "",
           location: job.location || "",
+          createdAt: job.created_at ? new Date(job.created_at).toISOString().slice(0,10) : "",
         });
         setMode("manual");
       } else {
-        setForm({ title: "", company: "", description: "", url: "", location: "" });
+        setForm({ title: "", company: "", description: "", url: "", location: "", createdAt: "" });
         setUrlInput("");
         setPreview(null);
         setScrapeError("");
@@ -75,7 +77,7 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
       const payload = { ...form };
       let savedJob;
       if (job) {
-        savedJob = await api.updateJob(job.id, payload);
+        savedJob = await api.updateJob(job.id, { ...payload, created_at: form.createdAt ? new Date(form.createdAt).toISOString() : null });
       } else {
         savedJob = await api.createJob(payload);
         try {
@@ -186,6 +188,10 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
               <div>
                 <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Job URL</label>
                 <input type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Date added</label>
+                <input type="date" value={form.createdAt} onChange={(e) => setForm({ ...form, createdAt: e.target.value })} className={inputClass} />
               </div>
               <div>
                 <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Job Description</label>

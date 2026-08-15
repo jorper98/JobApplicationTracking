@@ -113,10 +113,12 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
                     archive.write(file_path, arcname=str(Path("uploads") / file_path.relative_to(upload_root)))
 
     buffer.seek(0)
+    username = (user.email or "").split("@")[0] or "user"
+    filename = f"{username}-{datetime.now().strftime('%Y%m%d%H%M%S')}-job-tracker-export.zip"
     return StreamingResponse(
         buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=job-tracker-export.zip"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

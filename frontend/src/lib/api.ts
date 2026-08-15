@@ -124,6 +124,7 @@ export const api = {
     description?: string;
     url?: string;
     location?: string;
+    created_at?: string | null;
   }) => {
     const { data } = await client.patch(`/api/jobs/${id}`, job);
     return data;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -15,6 +15,7 @@ interface Job {
   url?: string;
   location?: string;
   extracted_skills?: string[];
+  created_at?: string;
 }
 
 interface JobNote {
@@ -152,6 +153,19 @@ export default function JobsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // Open a specific job when arriving via deep link (e.g. from the tracker)
+  const deepLinkedRef = useRef(false);
+  useEffect(() => {
+    const jobId = searchParams.get("job_id");
+    if (!jobId || deepLinkedRef.current || jobs.length === 0) return;
+    const job = jobs.find((j) => j.id === jobId);
+    if (job) {
+      deepLinkedRef.current = true;
+      handleSelectJob(job);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, searchParams]);
 
   // Close the drawer on Esc
   useEffect(() => {
@@ -566,6 +580,20 @@ export default function JobsPage() {
                     >
                       View original posting
                     </a>
+                  )}
+                  {selectedJob.created_at && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className="text-xs text-gray-400 dark:text-[#5a5a64]">
+                        Added: {new Date(selectedJob.created_at).toLocaleDateString()}
+                      </p>
+                      <button
+                        onClick={() => openEditModal(selectedJob)}
+                        title="Edit job (including date added)"
+                        className="p-0.5 rounded text-gray-400 dark:text-[#6b6b72] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
                 {!statusMap[selectedJob.id] && (

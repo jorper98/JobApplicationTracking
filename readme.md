@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.4-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.1.5-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -217,5 +217,5 @@ This codebase was developed with the assistance of AI tools. Portions of the cod
 
 ---
 
-**Version:** 1.1.4  
+**Version:** 1.1.5  
 **Last Updated:** 2026-08-14
