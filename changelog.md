@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.6
+
+### Version bump
+
+- Version bumped to 1.1.6
+
+### Security
+
+- API docs (`/docs`, `/redoc`, `/openapi.json`) are now disabled by default in production (`SHOW_API_DOCS=false`); auto-enabled in local dev via `DEBUG=true`, or opt in with `SHOW_API_DOCS=true`
+
+### Docs
+
+- Renamed DEPLOY-BUILD.md to PRODUCTION_DEPLOYMENT_GUIDE.md — now a production-only guide (VPS install, upgrades, HTTPS, firewall, backups, troubleshooting)
+- readme.md is now local-development focused and links to the production guide; added Docker dev workflow and common commands
+
 ## v1.1.5
 
 ### Admin system backup

@@ -1,12 +1,16 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.5-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.1.6-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
 
 JobApplicationTracker streamlines your job hunting workflow by combining application tracking with AI insights. Upload your resume, import jobs from URLs, get match scores, identify skill gaps, and generate personalized cover letters—all in one place.
+
+## Open Source & Managed
+
+JobApplicationTracker is open source and ready for you to use. It is also provided as a managed application at [35sites.com/applications/job-application-tracker/](https://35sites.com/applications/job-application-tracker/) — a demo of the app is there, the same as the one from this repository!
 
 ## Features
 
@@ -23,26 +27,11 @@ JobApplicationTracker streamlines your job hunting workflow by combining applica
 
 ## Tech Stack
 
-### Backend
-- **FastAPI** — Modern Python web framework
-- **SQLAlchemy 2.0** — Database ORM with async support
-- **PostgreSQL 15** — Relational database
-- **Google Gemini AI** — AI model for skill extraction, match analysis, and cover letters
-- **PyJWT** — JWT-based authentication with PBKDF2-HMAC-SHA256 password hashing
-- **pdfplumber** — PDF text extraction
-- **BeautifulSoup + httpx** — Web scraping for job posting URLs
+**Backend:** FastAPI · SQLAlchemy 2.0 · PostgreSQL 15 · Google Gemini AI · PyJWT · pdfplumber
 
-### Frontend
-- **Next.js 14** — React framework with App Router
-- **TypeScript** — Type-safe development
-- **Tailwind CSS** — Utility-first styling
-- **Recharts** — Data visualization (dashboard charts)
-- **react-dropzone** — Drag-and-drop file uploads
-- **axios** — HTTP client with interceptors
+**Frontend:** Next.js 14 · TypeScript · Tailwind CSS · Recharts · react-dropzone · axios
 
-### Infrastructure
-- **Docker Compose** — Containerized development environment
-- **PostgreSQL Docker** — Database container
+**Infrastructure:** Docker Compose · PostgreSQL container
 
 ## Quick Start
 
@@ -96,83 +85,54 @@ The application will be available at:
 3. Run AI analysis to get match scores
 4. Track applications on the **Tracker** board
 
+## Production Deployment
+
+The Quick Start above runs the app **locally** with hot-reload. To deploy
+on a VPS in production (Docker volumes, HTTPS via reverse proxy, backups,
+admin system backup/restore), follow the
+[Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md).
+
 ## Sample Data
 
-A ready-to-import sample dataset lives in the [`sample_data/`](sample_data/) folder so you can explore every feature without entering data by hand:
+A ready-to-import sample dataset lives in [`sample_data/`](sample_data/): **10 jobs** across every tracker status, **3 resume versions** with extracted skills and PDFs, **12 AI match analyses** (several with cover letters), and **14 notes**.
 
-- `sample_data/data.json` — the raw dataset (jobs, resumes, applications, analyses, notes)
-- `sample_data/uploads/` — sample resume PDFs
-- `sample_data/job-tracker-sample.zip` — the importable bundle (what you upload)
-- `sample_data/build_sample.py` — rebuilds the zip from `data.json`
+To import: log in, open **Data → Import Backup**, choose `sample_data/job-tracker-sample.zip`.
 
-What's included:
+> **Warning:** Import replaces **all** of your current data. Use it on a fresh account, or export a backup first.
 
-- **10 jobs** (Stripe, Vercel, Snowflake, Datadog, Cloudflare, HashiCorp, Notion, Linear, Airbnb, OpenAI) covering every tracker status: saved, applied, interview, offer, rejected, ghosted, not_pursued
-- **3 resume versions** (software engineer, data engineer, engineering lead) with extracted skills and matching PDFs
-- **12 match analyses** across job/resume pairs, several with ready-to-read cover letters
-- **14 notes** attached to jobs (recruiter screens, follow-ups, offers, rejections)
-
-### How to import
-
-1. Start the app and log in
-2. Open the **Data** page (Export / Import Data) from the top navigation
-3. Under **Import Backup**, choose `sample_data/job-tracker-sample.zip`
-4. Wait for "Import complete", then reload the app
-
-> **Warning:** Import replaces **all** of your current data (jobs, resumes, applications, analyses, notes, and uploaded files) with the contents of the archive. Use it on a fresh account, or export a backup first with **Export Backup**.
-
-To rebuild the zip after editing `data.json` (requires Python 3.10+):
-
-```bash
-python sample_data/build_sample.py
-```
+Rebuild the zip after editing `data.json` (Python 3.10+): `python sample_data/build_sample.py`
 
 ## API Documentation
 
-Interactive API documentation is available at http://localhost:8136/docs when the backend is running.
-
-Key endpoints:
-- `POST /api/auth/register` — Create account
-- `POST /api/auth/login` — Authenticate
-- `POST /api/resume/upload` — Upload resume
-- `POST /api/jobs/` — Create job
-- `POST /api/jobs/from-url` — Import job from URL
-- `POST /api/analysis/match` — Analyze resume-job match
-- `POST /api/analysis/{id}/cover-letter` — Generate cover letter
-- `GET /api/applications/kanban` — Get Kanban board data
-- `GET /api/data/export` — Export data as zip
-- `POST /api/data/import` — Import data from zip
-
-## Project Structure
-
-```
-JobApplicationTracker/
-├── backend/
-│   ├── app/
-│   │   ├── api/routes/       # FastAPI route handlers
-│   │   ├── core/             # Config, auth, database
-│   │   ├── models/           # SQLAlchemy models
-│   │   ├── schemas/          # Pydantic schemas
-│   │   ├── services/         # Business logic (AI, resume)
-│   │   └── main.py           # FastAPI app entry point
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── app/              # Next.js pages
-│   │   ├── components/       # React components
-│   │   ├── context/          # Auth context
-│   │   └── lib/              # API client, utilities
-│   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
-├── readme.md
-└── sample_data/               # Sample dataset + import bundle (see Sample Data section)
-```
+Interactive API docs: http://localhost:8136/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), jobs (`/api/jobs/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
 
 ## Development
 
+### Docker (recommended)
+
+The dev `docker-compose.yml` mounts the code into the containers, so most
+changes are picked up automatically:
+
+- **Backend changes** — any file in `backend/app/` (uvicorn `--reload` auto-restarts)
+- **Frontend changes** — any file in `frontend/src/` (Next.js hot-reloads)
+
+Just edit and save. **No rebuild is needed for code changes.** Rebuild
+when you change dependencies or Docker configuration (e.g. edited
+`requirements.txt`, `package.json`, a `Dockerfile`, or `docker-compose.yml`).
+
+```bash
+docker-compose up                 # start services
+docker-compose up --build         # rebuild images + start
+docker-compose up -d              # start in background
+docker-compose down               # stop services
+docker-compose down -v            # stop and delete volumes (fresh start)
+docker-compose logs -f backend    # follow backend logs
+docker-compose restart backend    # restart a single service
+docker-compose up --build backend # rebuild a single service
+```
+
 ### Backend only
+
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -180,6 +140,7 @@ uvicorn app.main:app --reload --port 8136
 ```
 
 ### Frontend only
+
 ```bash
 cd frontend
 npm install
@@ -204,11 +165,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## AI Disclaimer
 
-This codebase was developed with the assistance of AI tools. Portions of the code - including features, bug fixes, and documentation - were generated, reviewed, and refined with the help of AI assistants and should be treated accordingly.
-
-- AI-generated code should be reviewed and tested before production use, just like any other contribution
-- The author reviewed and verified the AI-assisted work, but no warranty is provided beyond the MIT License terms
-- No confidential or proprietary data was intentionally used to train or prompt the AI models
+This codebase was developed with the assistance of AI tools and should be reviewed and tested accordingly before production use.
 
 ## Author
 
@@ -217,5 +174,5 @@ This codebase was developed with the assistance of AI tools. Portions of the cod
 
 ---
 
-**Version:** 1.1.5  
-**Last Updated:** 2026-08-14
+**Version:** 1.1.6  
+**Last Updated:** 2026-08-15

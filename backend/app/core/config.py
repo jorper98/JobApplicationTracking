@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     UPLOAD_DIR: str = "uploads"
 
+    # API docs (Swagger UI / ReDoc) - disabled by default in production.
+    # Set SHOW_API_DOCS=true to enable, or docs are auto-enabled when DEBUG=true.
+    SHOW_API_DOCS: bool = False
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.DEBUG or self.SHOW_API_DOCS
+
     class Config:
         env_file = ".env"
         case_sensitive = True
