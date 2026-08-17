@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.6-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.1.8-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -23,6 +23,7 @@ JobApplicationTracker is open source and ready for you to use. It is also provid
 - **Search & Filter** — Full-text search across jobs, notes, and skills with status/tag filters
 - **Data Export/Import** — Backup and restore your data as a zip bundle
 - **User Management** — Multi-user support with admin controls (JWT authentication)
+- **Admin Settings** — Manage the AI model and Gemini API key from an admin-only Settings page
 - **Dark Mode** — Light/dark theme toggle with system preference detection
 
 ## Tech Stack
@@ -76,7 +77,10 @@ The application will be available at:
 
 1. Open http://localhost:8137
 2. Click "Create one" to register
-3. The first registered user automatically becomes an admin
+3. On a fresh install, the admin account is created from `DEFAULT_ADMIN_EMAIL` /
+   `DEFAULT_ADMIN_PASSWORD` in `backend/.env`; if the password is empty, a
+   random one is generated and printed in the backend logs on first startup.
+   New registrations never receive admin rights.
 
 ### 5. Start tracking jobs
 
@@ -165,14 +169,26 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## AI Disclaimer
 
-This codebase was developed with the assistance of AI tools and should be reviewed and tested accordingly before production use.
+This codebase was developed with the assistance of AI tools and should be reviewed and tested accordingly before production use. AI prompts treat user-supplied content (resumes, job descriptions, scraped pages) as untrusted data with injection guardrails, and AI output is used as data only — it never executes or drives control flow.
 
 ## Author
 
 **Jorge Pereira**  
 [35sites.com LLC](https://35sites.com/)
 
+## Original Repository
+
+This project is a heavily modified fork of
+[Job-Application-Tracker](https://github.com/iansiosontech/Job-Application-Tracker)
+by [Kristoffer Ian Sioson](https://github.com/iansiosontech) — credit goes to
+him for the original application.
+
+It has been heavily modified from the original repository, with new features
+and improvements. The changes include a more user-friendly interface, better
+data validation, and enhanced security measures. Additionally, the codebase
+has been refactored for better readability and maintainability.
+
 ---
 
-**Version:** 1.1.6  
-**Last Updated:** 2026-08-15
+**Version:** 1.1.8  
+**Last Updated:** 2026-08-16

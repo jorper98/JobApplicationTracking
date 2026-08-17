@@ -49,11 +49,16 @@ def create_access_token(user: User) -> str:
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    """FastAPI dependency: resolve the authenticated user from the Bearer token."""
+    """FastAPI dependency: resolve the authenticated user from the Bearer
+    token or the httpOnly session cookie."""
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header.removeprefix("Bearer ").strip()
+    if not token:
+        token = request.cookies.get("token", "")
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    token = auth_header.removeprefix("Bearer ").strip()
 
     try:
         claims = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])

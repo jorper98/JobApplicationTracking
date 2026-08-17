@@ -4,7 +4,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Loader2, GripVertical, Trash2, Search, Pencil } from "lucide-react";
+import { PageHeader, PageLoading, PageShell } from "@/components/PageShell";
+import { GripVertical, Trash2, Search, Pencil } from "lucide-react";
 
 const COLUMNS = [
   { key: "saved", label: "Saved", color: "#94a3b8" },
@@ -68,8 +69,9 @@ export default function TrackerPage() {
   const handleDrop = async (to: string) => {
     if (!dragging || dragging.from === to) return;
     const { card, from } = dragging;
-    setBoard((prev) => {
-      const updated = { ...prev };
+    const prev = board;
+    setBoard((prevState) => {
+      const updated = { ...prevState };
       updated[from] = updated[from].filter((c) => c.id !== card.id);
       updated[to] = [card, ...(updated[to] || [])];
       return updated;
@@ -79,19 +81,22 @@ export default function TrackerPage() {
       await api.updateApplication(card.id, { status: to });
     } catch (e) {
       console.error("Failed to update status", e);
+      setBoard(prev);
     }
   };
 
   const handleDelete = async (id: string, status: string) => {
     if (!confirm("Remove this application?")) return;
-    setBoard((prev) => ({
-      ...prev,
-      [status]: prev[status].filter((c) => c.id !== id),
+    const prev = board;
+    setBoard((prevState) => ({
+      ...prevState,
+      [status]: prevState[status].filter((c) => c.id !== id),
     }));
     try {
       await api.deleteApplication(id);
     } catch (e) {
       console.error("Failed to delete", e);
+      setBoard(prev);
     }
   };
 
@@ -103,18 +108,12 @@ export default function TrackerPage() {
   };
 
   if (loading) {
-    return (
-      <div className="p-8 flex items-center gap-3 text-gray-500 dark:text-[#8b8b96] min-h-screen">
-        <Loader2 className="animate-spin w-5 h-5" />
-        Loading tracker…
-      </div>
-    );
+    return <PageLoading message="Loading tracker…" />;
   }
 
   return (
-    <div className="p-8 min-h-screen">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Application Tracker</h1>
-      <p className="text-gray-500 dark:text-[#8b8b96] mb-6">Drag cards between columns to update status</p>
+    <PageShell>
+      <PageHeader title="Application Tracker" subtitle="Drag cards between columns to update status" />
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -219,7 +218,7 @@ export default function TrackerPage() {
           );
         })}
       </div>
-    </div>
+    </PageShell>
   );
 }
 

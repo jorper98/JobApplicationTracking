@@ -82,7 +82,7 @@ No build artifacts, no git history, no secrets.
 SFTP the zip to the server, then:
 
 ```bash
-unzip jobtracker-distribution-v1.1.6.zip -d /docker/jobtracker
+unzip jobtracker-distribution-v1.1.8.zip -d /docker/jobtracker
 cd /docker/jobtracker
 ls -la              # confirm docker-compose.prod.example.yml is present
 ls -la deploy/      # confirm .env.prod.example is present
@@ -112,7 +112,10 @@ POSTGRES_DB=job_tracker
 JWT_SECRET=<random-48-bytes>
 GEMINI_API_KEY=<your-gemini-key>
 GEMINI_MODEL=gemini-3.6-flash
+# Optional: fallback models tried in order when the primary is unavailable.
+GEMINI_FALLBACK_MODELS=["gemini-3.6-flash","gemini-3.5-flash-lite"]
 DEBUG=false
+COOKIE_SECURE=true
 FRONTEND_URL=https://yourdomain.com
 ALLOWED_ORIGINS=["https://yourdomain.com"]
 NEXT_PUBLIC_API_URL=https://yourdomain.com
@@ -138,8 +141,11 @@ You want to see:
 - Backend: `Application startup complete`
 - Frontend: `Ready`
 
-Press Ctrl+C to exit the log view, open `https://yourdomain.com`, and
-register your account — **the first registered user becomes admin**.
+Press Ctrl+C to exit the log view, open `https://yourdomain.com`, and log
+in with the admin account bootstrapped from `DEFAULT_ADMIN_EMAIL` /
+`DEFAULT_ADMIN_PASSWORD` in `deploy/.env.prod`. If `DEFAULT_ADMIN_PASSWORD`
+is empty, a random password is generated and printed in the backend logs on
+first startup. New registrations never receive admin rights.
 
 > `NEXT_PUBLIC_API_URL` is read at **build time** by Next.js and inlined
 > into the JS bundle. Passing `--env-file deploy/.env.prod` to docker compose
@@ -155,7 +161,7 @@ install — only application files are replaced:
 
 ```bash
 cd /docker/jobtracker
-unzip -o jobtracker-distribution-v1.1.6.zip
+unzip -o jobtracker-distribution-v1.1.8.zip
 docker compose --env-file deploy/.env.prod -f docker-compose.prod.yml up -d --build
 ```
 
@@ -198,7 +204,8 @@ server {
 ```
 
 HTTPS is non-negotiable since login credentials and JWTs travel over the
-wire.
+wire. Set `COOKIE_SECURE=true` so the session cookie is only ever sent over
+HTTPS.
 
 > **API docs are disabled by default in production.** FastAPI's `/docs`,
 > `/redoc`, and `/openapi.json` are turned off unless `SHOW_API_DOCS=true`

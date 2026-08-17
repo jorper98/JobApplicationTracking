@@ -1,5 +1,81 @@
 # Changelog
 
+## v1.1.8
+
+### Version bump
+
+- Version bumped to 1.1.8
+
+### Security
+
+- SSRF guard on job URL import: only http/https URLs allowed, hosts resolving
+  to private/loopback/link-local addresses are rejected, redirects are
+  validated per hop (P1.002)
+- `DEBUG` code default flipped to `false` so /docs and /api/debug routes stay
+  off unless explicitly enabled (P1.007)
+- Admin bootstrap from env: on a fresh install the admin account is created
+  from `DEFAULT_ADMIN_EMAIL`/`DEFAULT_ADMIN_PASSWORD` at startup; the
+  first-registered-user-becomes-admin behavior is removed (P1.009)
+- Password hashes stripped from the user data export (P1.011)
+- Registration no longer reveals whether an email is already registered (P1.014)
+- Added MIT LICENSE file referenced by readme.md (P3.008)
+- Rate limiting: login capped at 20 attempts / 15 min per IP, registration at
+  5 / hour per IP, account lockout after 5 failed logins, per-user AI quota
+  of 40 calls / day (P1.010)
+- Sessions moved from localStorage to an httpOnly SameSite=Lax cookie with a
+  logout endpoint; `COOKIE_SECURE` flag for HTTPS deployments (P1.012)
+- Prompt injection guardrails: user-supplied resume/job text is wrapped in
+  untrusted-data markers with an instruction to ignore embedded instructions
+  (P1.008)
+- Dependency updates: Next.js 14.2.35, axios 1.19.0, fastapi 0.115.14,
+  uvicorn 0.34.3, python-multipart 0.0.20 (fixes multipart DoS CVE-2024-24762)
+  (P1.013)
+
+### Quality
+
+- Removed unused frontend dependencies: @radix-ui/*, class-variance-authority,
+  date-fns (P3.002)
+- Typed Job/JobPreview shared types; removed stray `any` types and unused
+  imports; `noUnusedLocals` enabled in tsconfig (P3.006)
+- Added pytest suite for the security-critical paths (auth, lockout, SSRF
+  guard, export, admin AI settings) and a GitHub Actions CI workflow running
+  backend tests + frontend typecheck/build (P3.001)
+- Extracted shared PageShell / PageHeader / PageLoading components used by
+  all six app pages (P3.003)
+- FK indexes on resumes.user_id, job_notes.job_id, job_analyses.job_id,
+  job_analyses.resume_id, applications.user_id, applications.job_id (created
+  automatically for new and existing databases) and limit/offset pagination
+  on all list endpoints (P3.007)
+- New admin-only Settings page to manage the Gemini model + API key override
+  (persisted server-side, applied immediately, falls back to .env defaults)
+  (P3.009)
+
+### Bug fixes
+
+- Match score on new applications prefers the analysis computed against the
+  user's active resume instead of the most recent analysis for the job (P2.007)
+- Resume versions use max(version)+1 so deleted versions never collide (P2.005)
+- Kanban drag-and-drop and card deletion roll back to the previous board when
+  the API call fails (P2.004)
+- Dev docker-compose.yml marked DEV-ONLY; production deploys use the hardened
+  Dockerfile.prod + docker-compose.prod.yml path (P2.008)
+- Gemini client/fallback code deduplicated — debug.py now reuses ai_service,
+  and the fallback model list is configurable via GEMINI_FALLBACK_MODELS (P2.006)
+- Playwright support: JS-heavy job pages and cookie consent walls now render
+  in headless Chromium when plain HTTP scraping returns too little text;
+  degrades gracefully when the browser is not installed (P2.014)
+
+### Docs
+
+- readme.md now credits the original repository: Job-Application-Tracker by
+  Kristoffer Ian Sioson (https://github.com/iansiosontech/Job-Application-Tracker)
+
+## v1.1.7
+
+### Version bump
+
+- Version bumped to 1.1.7
+
 ## v1.1.6
 
 ### Version bump

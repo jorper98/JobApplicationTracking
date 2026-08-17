@@ -5,12 +5,18 @@ from app.models.models import JobAnalysis, Job, Resume, User
 from app.schemas.schemas import AnalysisRequest, AnalysisResponse
 from app.services.ai_service import analyze_match, generate_cover_letter
 from app.core.auth import get_current_user
+from app.core.rate_limit import ai_quota_limit
 
 router = APIRouter()
 
 
 @router.post("/match", response_model=AnalysisResponse)
-def analyze_job_match(data: AnalysisRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def analyze_job_match(
+    data: AnalysisRequest,
+    _quota: None = Depends(ai_quota_limit),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Score resume against job description. Returns match score, skills gap, suggestions."""
     job = db.query(Job).filter(Job.id == data.job_id, Job.user_id == user.id).first()
     if not job:
@@ -61,7 +67,12 @@ def analyze_job_match(data: AnalysisRequest, user: User = Depends(get_current_us
 
 
 @router.post("/{analysis_id}/cover-letter")
-def create_cover_letter(analysis_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_cover_letter(
+    analysis_id: str,
+    _quota: None = Depends(ai_quota_limit),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Generate a tailored cover letter for a job analysis."""
     analysis = db.query(JobAnalysis).filter(JobAnalysis.id == analysis_id).first()
     if not analysis or analysis.job.user_id != user.id:

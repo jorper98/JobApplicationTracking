@@ -4,20 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { type Job } from "@/lib/types";
 import { Loader2, Plus, Trash2, Pencil, Search, X, FileText } from "lucide-react";
 import { JobModal } from "@/components/JobModal";
-
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  company_id?: string | null;
-  description?: string;
-  url?: string;
-  location?: string;
-  extracted_skills?: string[];
-  created_at?: string;
-}
+import { PageShell } from "@/components/PageShell";
 
 interface JobNote {
   id: string;
@@ -265,7 +255,7 @@ export default function JobsPage() {
     setModalOpen(true);
   };
 
-  const handleModalSave = (savedJob: any) => {
+  const handleModalSave = (savedJob: Job) => {
     if (editingJob) {
       setJobs((prev) => prev.map((j) => (j.id === savedJob.id ? savedJob : j)));
     } else {
@@ -446,7 +436,7 @@ export default function JobsPage() {
     "inline-flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-[#c0c0c8] bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.1] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
   return (
-    <div className="p-8 max-w-[1920px]">
+    <PageShell maxWidth="max-w-[1920px]">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Jobs</h1>
@@ -1116,6 +1106,6 @@ export default function JobsPage() {
         job={editingJob || undefined}
         onSave={handleModalSave}
       />
-    </div>
+    </PageShell>
   );
 }

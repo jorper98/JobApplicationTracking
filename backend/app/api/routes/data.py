@@ -95,7 +95,9 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
     notes = db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).all() if job_ids else []
 
     payload = {
-        "users": [serialize_model(user)],
+        "users": [
+            {key: value for key, value in serialize_model(user).items() if key != "password_hash"}
+        ],
         "companies": [serialize_model(company) for company in db.query(Company).filter(Company.user_id == user.id).all()],
         "resumes": [serialize_model(resume) for resume in resumes],
         "jobs": [serialize_model(job) for job in jobs],

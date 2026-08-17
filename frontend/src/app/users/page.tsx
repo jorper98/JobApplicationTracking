@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Loader2, Plus, Pencil, Trash2, Shield, User as UserIcon } from "lucide-react";
+import { PageLoading, PageShell } from "@/components/PageShell";
+import { Plus, Pencil, Trash2, Shield, User as UserIcon } from "lucide-react";
 
 interface ManagedUser {
   id: string;
@@ -112,16 +113,11 @@ export default function UsersPage() {
     "w-full bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500";
 
   if (loading) {
-    return (
-      <div className="p-8 flex items-center gap-3 text-gray-500 dark:text-[#8b8b96] min-h-screen">
-        <Loader2 className="animate-spin w-5 h-5" />
-        Loading users...
-      </div>
-    );
+    return <PageLoading message="Loading users..." />;
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <PageShell maxWidth="max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">User Management</h1>
@@ -219,7 +215,7 @@ export default function UsersPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

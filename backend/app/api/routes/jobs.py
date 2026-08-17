@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import Job, JobNote, User
@@ -6,6 +6,7 @@ from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text
 from app.api.routes.companies import get_or_create_company
 from app.core.auth import get_current_user
+from app.core.rate_limit import ai_quota_limit
 from typing import List
 
 router = APIRouter()
@@ -67,9 +68,21 @@ def create_job(job_data: JobCreate, user: User = Depends(get_current_user), db: 
 
 
 @router.get("/", response_model=List[JobResponse])
-def list_jobs(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """List all jobs for the current user."""
-    return db.query(Job).filter(Job.user_id == user.id).order_by(Job.created_at.desc()).all()
+def list_jobs(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List the current user's jobs, newest first, with pagination."""
+    return (
+        db.query(Job)
+        .filter(Job.user_id == user.id)
+        .order_by(Job.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -152,7 +165,12 @@ def delete_job_note(job_id: str, note_id: str, user: User = Depends(get_current_
 
 
 @router.post("/from-url", response_model=JobResponse)
-def create_job_from_url(payload: dict, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_job_from_url(
+    payload: dict,
+    _quota: None = Depends(ai_quota_limit),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Scrape a job posting URL, extract details with AI, and save it."""
     url = payload.get("url")
     if not url:
@@ -190,7 +208,11 @@ def create_job_from_url(payload: dict, user: User = Depends(get_current_user), d
 
 
 @router.post("/from-url/preview")
-def preview_job_from_url(payload: dict, user: User = Depends(get_current_user)):
+def preview_job_from_url(
+    payload: dict,
+    _quota: None = Depends(ai_quota_limit),
+    user: User = Depends(get_current_user),
+):
     """Scrape a job posting URL and return extracted fields without saving."""
     url = payload.get("url")
     if not url:

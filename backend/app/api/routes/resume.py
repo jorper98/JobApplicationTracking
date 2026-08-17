@@ -1,4 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import Resume, User
@@ -7,6 +8,7 @@ from app.services.resume_service import extract_text_from_pdf, save_upload
 from app.services.ai_service import extract_skills_from_resume
 from app.core.auth import get_current_user
 from app.core.config import settings
+from app.core.rate_limit import ai_quota_limit
 from typing import List
 import os
 
@@ -16,6 +18,7 @@ router = APIRouter()
 @router.post("/upload", response_model=ResumeResponse)
 async def upload_resume(
     file: UploadFile = File(...),
+    _quota: None = Depends(ai_quota_limit),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -46,8 +49,8 @@ async def upload_resume(
     # Deactivate previous resumes
     db.query(Resume).filter(Resume.user_id == user.id).update({"is_active": False})
 
-    # Get next version
-    count = db.query(Resume).filter(Resume.user_id == user.id).count()
+    # Next version: max(version)+1 so deleted versions never collide
+    latest_version = db.query(func.max(Resume.version)).filter(Resume.user_id == user.id).scalar()
 
     resume = Resume(
         user_id=user.id,
@@ -56,7 +59,7 @@ async def upload_resume(
         raw_text=raw_text,
         extracted_skills=extracted_skills,
         is_active=True,
-        version=count + 1,
+        version=(latest_version or 0) + 1,
     )
     db.add(resume)
     db.commit()
@@ -65,10 +68,21 @@ async def upload_resume(
 
 
 @router.get("/", response_model=List[ResumeResponse])
-def list_resumes(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """List all resumes for the current user."""
-    resumes = db.query(Resume).filter(Resume.user_id == user.id).order_by(Resume.created_at.desc()).all()
-    return resumes
+def list_resumes(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List the current user's resumes, newest first, with pagination."""
+    return (
+        db.query(Resume)
+        .filter(Resume.user_id == user.id)
+        .order_by(Resume.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/active", response_model=ResumeResponse)

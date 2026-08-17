@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { api, registerTokenProvider } from "@/lib/api";
+import { api } from "@/lib/api";
 
 export interface AuthUser {
   id: string;
@@ -15,7 +15,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -23,53 +23,38 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   login: async () => {},
   register: async () => {},
-  logout: () => {},
+  logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const applyToken = (token: string | null) => {
-    registerTokenProvider(() => Promise.resolve(token));
-  };
-
-  // Restore session from localStorage on mount
+  // Restore session from the httpOnly cookie on mount.
   useEffect(() => {
-    const token = window.localStorage.getItem("token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    applyToken(token);
     api
       .me()
       .then((me) => setUser(me))
-      .catch(() => {
-        window.localStorage.removeItem("token");
-        applyToken(null);
-      })
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (email: string, password: string) => {
     const data = await api.login(email, password);
-    window.localStorage.setItem("token", data.access_token);
-    applyToken(data.access_token);
     setUser(data.user);
   };
 
   const register = async (email: string, password: string, fullName?: string) => {
     const data = await api.register(email, password, fullName);
-    window.localStorage.setItem("token", data.access_token);
-    applyToken(data.access_token);
     setUser(data.user);
   };
 
-  const logout = () => {
-    window.localStorage.removeItem("token");
-    applyToken(null);
-    setUser(null);
+  const logout = async () => {
+    try {
+      await api.logout();
+    } finally {
+      setUser(null);
+    }
   };
 
   return (
@@ -82,4 +67,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
-

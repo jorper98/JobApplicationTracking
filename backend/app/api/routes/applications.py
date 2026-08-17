@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Application, Job, User, ApplicationStatus
+from app.models.models import Application, Job, JobAnalysis, Resume, User, ApplicationStatus
 from app.schemas.schemas import ApplicationCreate, ApplicationUpdate, ApplicationResponse
 from app.core.auth import get_current_user
 from typing import List
@@ -17,14 +17,28 @@ def create_application(data: ApplicationCreate, user: User = Depends(get_current
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Grab the most recent analysis for this job to copy its match score
-    from app.models.models import JobAnalysis
-    analysis = (
-        db.query(JobAnalysis)
-        .filter(JobAnalysis.job_id == data.job_id)
-        .order_by(JobAnalysis.created_at.desc())
+    # Prefer the analysis computed against the user's active resume; only
+    # fall back to the most recent analysis for the job otherwise.
+    analysis = None
+    active_resume = (
+        db.query(Resume)
+        .filter(Resume.user_id == user.id, Resume.is_active == True)
         .first()
     )
+    if active_resume:
+        analysis = (
+            db.query(JobAnalysis)
+            .filter(JobAnalysis.job_id == data.job_id, JobAnalysis.resume_id == active_resume.id)
+            .order_by(JobAnalysis.created_at.desc())
+            .first()
+        )
+    if analysis is None:
+        analysis = (
+            db.query(JobAnalysis)
+            .filter(JobAnalysis.job_id == data.job_id)
+            .order_by(JobAnalysis.created_at.desc())
+            .first()
+        )
 
     app = Application(
         user_id=user.id,
@@ -41,12 +55,19 @@ def create_application(data: ApplicationCreate, user: User = Depends(get_current
 
 
 @router.get("/", response_model=List[ApplicationResponse])
-def list_applications(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """List all applications for the current user."""
+def list_applications(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List applications for the current user, newest first, with pagination."""
     return (
         db.query(Application)
         .filter(Application.user_id == user.id)
         .order_by(Application.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -61,6 +61,8 @@ def _with_job_count(db: Session, user: User, companies: List[Company]) -> List[C
 @router.get("/", response_model=List[CompanyResponse])
 def list_companies(
     search: str = "",
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -69,7 +71,7 @@ def list_companies(
     q = search.strip()
     if q:
         query = query.filter(func.lower(Company.name).contains(q.lower()))
-    companies = query.order_by(func.lower(Company.name)).all()
+    companies = query.order_by(func.lower(Company.name)).offset(offset).limit(limit).all()
     return _with_job_count(db, user, companies)
 
 

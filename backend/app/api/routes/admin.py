@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_admin, hash_password
+from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import User
+from app.models.models import AppSetting, User
 
 router = APIRouter()
 
@@ -102,4 +103,58 @@ def delete_user(user_id: str, admin: User = Depends(get_current_admin), db: Sess
     db.delete(user)
     db.commit()
     return {"message": "User deleted"}
+
+
+class AISettingsResponse(BaseModel):
+    gemini_model: str
+    gemini_api_key_set: bool
+
+
+class AISettingsUpdate(BaseModel):
+    gemini_model: str | None = Field(default=None, min_length=1)
+    gemini_api_key: str | None = None
+
+
+def _get_setting(db: Session, key: str) -> str | None:
+    row = db.get(AppSetting, key)
+    return row.value if row else None
+
+
+def _set_setting(db: Session, key: str, value: str) -> None:
+    row = db.get(AppSetting, key)
+    if row is None:
+        db.add(AppSetting(key=key, value=value))
+    else:
+        row.value = value
+
+
+@router.get("/settings/ai", response_model=AISettingsResponse)
+def get_ai_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Return the active AI model and whether an API key override is set (admin only)."""
+    model = _get_setting(db, "gemini_model")
+    api_key = _get_setting(db, "gemini_api_key")
+    return {
+        "gemini_model": model if model else settings.GEMINI_MODEL,
+        "gemini_api_key_set": bool(api_key),
+    }
+
+
+@router.put("/settings/ai", response_model=AISettingsResponse)
+def update_ai_settings(
+    data: AISettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Persist AI model/API key overrides and apply them immediately (admin only)."""
+    if data.gemini_model is not None:
+        _set_setting(db, "gemini_model", data.gemini_model.strip() or settings.GEMINI_MODEL)
+    if data.gemini_api_key is not None:
+        _set_setting(db, "gemini_api_key", data.gemini_api_key.strip())
+    db.commit()
+
+    model = _get_setting(db, "gemini_model") or settings.GEMINI_MODEL
+    api_key = _get_setting(db, "gemini_api_key") or ""
+    settings.GEMINI_MODEL = model
+    settings.GEMINI_API_KEY = api_key
+    return {"gemini_model": model, "gemini_api_key_set": bool(api_key)}
 

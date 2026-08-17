@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, FileText, LayoutDashboard, Target, PlusCircle, Database, Users } from "lucide-react";
+import { Briefcase, FileText, LayoutDashboard, Target, PlusCircle, Database, Users, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,7 @@ export function TopNav() {
   const path = usePathname();
   const { user } = useAuth();
   const navItems = user?.is_admin
-    ? [...nav, { href: "/users", label: "Users", icon: Users }]
+    ? [...nav, { href: "/users", label: "Users", icon: Users }, { href: "/settings", label: "Settings", icon: Settings }]
     : nav;
   return (
     <nav className="border-b border-gray-200 bg-white dark:border-white/[0.08] dark:bg-[#0d0d14]">

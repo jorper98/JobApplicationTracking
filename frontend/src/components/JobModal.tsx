@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import { type Job, type JobPreview } from "@/lib/types";
 import { X, Link2, FileText, Building2, Check } from "lucide-react";
 
 interface JobModalProps {
   isOpen: boolean;
   onClose: () => void;
-  job?: any;
-  onSave: (job: any) => void;
+  job?: Job;
+  onSave: (job: Job) => void;
 }
 
 interface Company {
@@ -33,7 +34,7 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
   const [urlInput, setUrlInput] = useState("");
   const [scraping, setScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState("");
-  const [preview, setPreview] = useState<any>(null);
+  const [preview, setPreview] = useState<JobPreview | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 

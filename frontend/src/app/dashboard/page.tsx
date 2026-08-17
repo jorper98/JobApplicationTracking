@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { PageHeader, PageShell } from "@/components/PageShell";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
@@ -80,13 +81,12 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-8 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-          {greetingText}{user?.full_name ? ", " + user.full_name : ""}
-        </h1>
-        <p className="text-gray-500 dark:text-[#8b8b96]">Your job search at a glance</p>
-      </div>
+    <PageShell>
+      <PageHeader
+        className="mb-8"
+        title={greetingText + (user?.full_name ? ", " + user.full_name : "")}
+        subtitle="Your job search at a glance"
+      />
 
       {/* Stat cards */}
       {loading ? (
@@ -179,7 +179,7 @@ export default function DashboardPage() {
           </ol>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

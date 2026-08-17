@@ -4,11 +4,12 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { DownloadCloud, UploadCloud, Trash2, DatabaseBackup } from "lucide-react";
+import { PageHeader, PageShell } from "@/components/PageShell";
 
 export default function DataPage() {
   const { user } = useAuth();
   const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [, setImporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
@@ -111,9 +112,8 @@ export default function DataPage() {
   };
 
   return (
-    <div className="p-8 max-w-4xl min-h-screen">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Export / Import Data</h1>
-      <p className="text-gray-500 dark:text-[#8b8b96] mb-6">Download a backup of your database and upload files, or restore from a previous export.</p>
+    <PageShell maxWidth="max-w-4xl">
+      <PageHeader title="Export / Import Data" subtitle="Download a backup of your database and upload files, or restore from a previous export." />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6">
@@ -217,7 +217,7 @@ export default function DataPage() {
       </div>
 
       {message ? <div className="mt-6 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-4 text-sm text-gray-700 dark:text-[#c0c0c8]">{message}</div> : null}
-    </div>
+    </PageShell>
   );
 }
 

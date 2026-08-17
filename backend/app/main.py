@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.1.6",
+    version="1.1.8",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -115,6 +115,32 @@ def on_startup():
                 print("Legacy Clerk users migrated to admin@local / admin123")
     except Exception as exc:
         print("Users schema migration failed:", exc)
+    # Bootstrap admin: on a fresh install with no users, create the admin
+    # account from env settings so registration never grants admin.
+    try:
+        from app.db.database import SessionLocal
+        from app.models.models import User
+        from app.core.auth import hash_password
+        import secrets as _secrets
+        db = SessionLocal()
+        try:
+            if db.query(User).count() == 0 and settings.DEFAULT_ADMIN_EMAIL:
+                admin_password = settings.DEFAULT_ADMIN_PASSWORD or _secrets.token_urlsafe(12)
+                db.add(User(
+                    email=settings.DEFAULT_ADMIN_EMAIL,
+                    password_hash=hash_password(admin_password),
+                    full_name="Admin",
+                    is_admin=True,
+                ))
+                db.commit()
+                if settings.DEFAULT_ADMIN_PASSWORD:
+                    print(f"Bootstrap admin created: {settings.DEFAULT_ADMIN_EMAIL}")
+                else:
+                    print(f"Bootstrap admin created: {settings.DEFAULT_ADMIN_EMAIL} / {admin_password} (change it after first login)")
+        finally:
+            db.close()
+    except Exception as exc:
+        print("Admin bootstrap failed:", exc)
     # Backfill: every job without an application gets a "saved" application so
     # it appears on the tracker board and dashboard counts stay consistent.
     try:
@@ -130,6 +156,37 @@ def on_startup():
         print("Saved-application backfill failed:", exc)
     # Creates any tables that do not exist yet (safe to run repeatedly)
     Base.metadata.create_all(bind=engine)
+    # Ensure FK indexes exist on existing databases (create_all only indexes
+    # newly created tables).
+    try:
+        with engine.begin() as conn:
+            for index_sql in (
+                "CREATE INDEX IF NOT EXISTS ix_resumes_user_id ON resumes (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_job_notes_job_id ON job_notes (job_id)",
+                "CREATE INDEX IF NOT EXISTS ix_job_analyses_job_id ON job_analyses (job_id)",
+                "CREATE INDEX IF NOT EXISTS ix_job_analyses_resume_id ON job_analyses (resume_id)",
+                "CREATE INDEX IF NOT EXISTS ix_applications_user_id ON applications (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_applications_job_id ON applications (job_id)",
+            ):
+                conn.execute(text(index_sql))
+    except Exception as exc:
+        print("Index creation failed:", exc)
+    # Apply persisted AI settings overrides (admin Settings tab) on startup.
+    try:
+        from app.db.database import SessionLocal
+        from app.models.models import AppSetting
+        db = SessionLocal()
+        try:
+            model_row = db.get(AppSetting, "gemini_model")
+            key_row = db.get(AppSetting, "gemini_api_key")
+            if model_row and model_row.value:
+                settings.GEMINI_MODEL = model_row.value
+            if key_row and key_row.value:
+                settings.GEMINI_API_KEY = key_row.value
+        finally:
+            db.close()
+    except Exception as exc:
+        print("AI settings override load failed:", exc)
     # Ensure jobs.company_id exists, then backfill company records from the
     # company name stored on each job.
     try:

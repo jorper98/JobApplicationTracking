@@ -5,50 +5,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8136";
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
+  withCredentials: true,
 });
-
-let tokenProvider: (() => Promise<string | null>) | null = null;
-
-/** Register a callback that returns a fresh Clerk token (see AuthBridge). */
-export function registerTokenProvider(provider: (() => Promise<string | null>) | null) {
-  tokenProvider = provider;
-}
-
-// Fetch a fresh token before every request so the token never expires mid-session.
-client.interceptors.request.use(async (config) => {
-  if (tokenProvider) {
-    try {
-      const token = await tokenProvider();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch {
-      // no token available — request proceeds, backend will reject with 401
-    }
-  }
-  return config;
-});
-
-// If a request fails with 401, retry once with a freshly minted token.
-client.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const original = error.config;
-    if (error.response?.status === 401 && !(original as any)?._retried && tokenProvider) {
-      (original as any)._retried = true;
-      try {
-        const token = await tokenProvider();
-        if (token) {
-          original.headers.Authorization = `Bearer ${token}`;
-          return client(original);
-        }
-      } catch {
-        // fall through to the original error
-      }
-    }
-    return Promise.reject(error);
-  }
-);
 
 export const api = {
   // Auth
@@ -59,6 +17,9 @@ export const api = {
   login: async (email: string, password: string) => {
     const { data } = await client.post("/api/auth/login", { email, password });
     return data;
+  },
+  logout: async () => {
+    await client.post("/api/auth/logout");
   },
   me: async () => {
     const { data } = await client.get("/api/auth/me");
@@ -79,6 +40,15 @@ export const api = {
   },
   deleteUser: async (id: string) => {
     const { data } = await client.delete(`/api/users/${id}`);
+    return data;
+  },
+  // Admin: AI settings
+  getAISettings: async () => {
+    const { data } = await client.get("/api/users/settings/ai");
+    return data;
+  },
+  updateAISettings: async (payload: { gemini_model?: string; gemini_api_key?: string }) => {
+    const { data } = await client.put("/api/users/settings/ai", payload);
     return data;
   },
   // Resume

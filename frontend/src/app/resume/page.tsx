@@ -2,6 +2,7 @@
 
 import { Upload, CheckCircle, FileText, Loader2, Trash2 } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
+import { PageHeader, PageShell } from "@/components/PageShell";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
 
@@ -68,9 +69,8 @@ export default function ResumePage() {
   });
 
   return (
-    <div className="p-8 max-w-3xl min-h-screen">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Resume</h1>
-      <p className="text-gray-500 dark:text-[#8b8b96] mb-6">Upload your PDF resume — AI will extract your skills automatically</p>
+    <PageShell maxWidth="max-w-3xl">
+      <PageHeader title="Resume" subtitle="Upload your PDF resume — AI will extract your skills automatically" />
 
       <div
         {...getRootProps()}
@@ -152,6 +152,6 @@ export default function ResumePage() {
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

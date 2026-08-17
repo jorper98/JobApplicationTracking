@@ -23,6 +23,13 @@ class ApplicationStatus(str, enum.Enum):
     NOT_PURSUED = "not_pursued"
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=False)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -44,7 +51,7 @@ class Resume(Base):
     __tablename__ = "resumes"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
     raw_text = Column(Text, nullable=True)
@@ -99,7 +106,7 @@ class JobNote(Base):
     __tablename__ = "job_notes"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=False, index=True)
     note = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -110,8 +117,8 @@ class JobAnalysis(Base):
     __tablename__ = "job_analyses"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
-    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=False, index=True)
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False, index=True)
     match_score = Column(Float, nullable=True)          # 0-100
     matching_skills = Column(JSON, nullable=True)       # ["Python", "Git"]
     missing_skills = Column(JSON, nullable=True)        # ["Docker", "React"]
@@ -127,8 +134,8 @@ class Application(Base):
     __tablename__ = "applications"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=False, index=True)
     status = Column(Enum(ApplicationStatus), default=ApplicationStatus.APPLIED)
     applied_date = Column(DateTime(timezone=True), nullable=True)
     follow_up_date = Column(DateTime(timezone=True), nullable=True)
