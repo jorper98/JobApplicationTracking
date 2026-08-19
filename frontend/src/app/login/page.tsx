@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
@@ -9,19 +10,40 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
+    setResendMessage("");
     setSubmitting(true);
     try {
       await login(email, password);
       // AuthGate redirects to /dashboard automatically
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
+      if (err?.response?.status === 403) {
+        setNeedsVerification(true);
+      }
       setError(Array.isArray(detail) ? detail[0]?.msg || "Invalid input" : detail || "Login failed. Check your email and password.");
       setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResending(true);
+    setResendMessage("");
+    try {
+      const data = await api.resendVerification(email);
+      setResendMessage(data.message);
+    } catch (err: any) {
+      setResendMessage(err?.response?.data?.detail || "Could not resend the verification email. Try again later.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -30,7 +52,7 @@ export default function LoginPage() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.1.8</span>
+          <span className="text-xs text-slate-300">v1.1.9</span>
         </Link>
       </header>
 
@@ -38,7 +60,7 @@ export default function LoginPage() {
         <section className="bg-gray-100 dark:bg-[#0a0a0f] flex items-start justify-center p-10">
           <div className="w-full max-w-sm space-y-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white text-center">JobApplicationTracker</h1>
-            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.1.8</p>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.1.9</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -65,6 +87,24 @@ export default function LoginPage() {
               </div>
 
               {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+              {needsVerification && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-4 space-y-3">
+                  <p className="text-sm text-amber-800 dark:text-amber-300">
+                    Please verify your email before logging in. Check your inbox (or spam folders) for the
+                    verification link.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resending || !email}
+                    className="w-full bg-amber-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {resending ? "Sending..." : "Resend verification email"}
+                  </button>
+                  {resendMessage && <p className="text-xs text-amber-700 dark:text-amber-400">{resendMessage}</p>}
+                </div>
+              )}
 
               <button
                 type="submit"

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Job, JobNote, User
+from app.models.models import Job, JobNote, ApplicationStatus, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text
 from app.api.routes.companies import get_or_create_company
+from app.api.routes.applications import get_or_create_application
 from app.core.auth import get_current_user
 from app.core.rate_limit import ai_quota_limit
 from typing import List
@@ -17,6 +18,38 @@ def _get_owned_job(db: Session, user: User, job_id: str) -> Job:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+def _extract_job_skills_in_background(job_id: str, description: str) -> None:
+    """Run after the response is sent: AI-extract skills and update the job.
+
+    The DB connection is only held for the quick lookups, never across the
+    Gemini call, so a burst of saves cannot exhaust the connection pool.
+    """
+    from app.db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        exists = db.query(Job.id).filter(Job.id == job_id).first()
+    finally:
+        db.close()
+    if not exists:
+        return
+
+    extracted = extract_skills_from_job(description)
+
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return
+        job.extracted_skills = extracted.get("skills", [])
+        job.extracted_data = extracted
+        db.commit()
+    except Exception as exc:
+        print(f"Background AI extraction failed for job {job_id}: {exc}")
+    finally:
+        db.close()
 
 
 def _resolve_company_id(db: Session, user: User, company_id, company_name) -> str:
@@ -35,19 +68,19 @@ def _resolve_company_id(db: Session, user: User, company_id, company_name) -> st
 
 
 @router.post("/", response_model=JobResponse)
-def create_job(job_data: JobCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Create a job entry. If description provided, AI extracts skills."""
-    extracted_skills = []
-    extracted_data = {}
+def create_job(
+    job_data: JobCreate,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a job entry and add it to the tracker.
 
-    if job_data.description:
-        try:
-            extracted_data = extract_skills_from_job(job_data.description)
-            extracted_skills = extracted_data.get("skills", [])
-        except Exception as e:
-            # Don't fail if AI extraction fails
-            print(f"AI extraction failed: {e}")
-
+    The job is saved immediately; AI skill extraction runs in the background
+    so saving never blocks on the Gemini API. The tracker entry ("saved")
+    is created in the same request, so the job and its application are
+    always consistent.
+    """
     job = Job(
         user_id=user.id,
         title=job_data.title,
@@ -58,12 +91,20 @@ def create_job(job_data: JobCreate, user: User = Depends(get_current_user), db: 
         location=job_data.location,
         salary_min=job_data.salary_min,
         salary_max=job_data.salary_max,
-        extracted_skills=extracted_skills,
-        extracted_data=extracted_data,
+        extracted_skills=[],
+        extracted_data={},
     )
     db.add(job)
+    db.flush()
+    # Track the new job in the SAME transaction: a failure here can never
+    # leave a job committed without its tracker entry.
+    get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
     db.commit()
     db.refresh(job)
+
+    if job_data.description:
+        background_tasks.add_task(_extract_job_skills_in_background, job.id, job_data.description)
+
     return job
 
 
@@ -148,6 +189,8 @@ def update_job_note(job_id: str, note_id: str, note_data: JobNoteUpdate, user: U
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     note.note = note_data.note
+    if note_data.created_at is not None:
+        note.created_at = note_data.created_at
     db.commit()
     db.refresh(note)
     return note
@@ -202,6 +245,8 @@ def create_job_from_url(
         extracted_data=extracted,
     )
     db.add(job)
+    db.flush()
+    get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
     db.commit()
     db.refresh(job)
     return job

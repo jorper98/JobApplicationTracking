@@ -37,7 +37,13 @@ def _get_client():
         return None
     if _client_cache["key"] != api_key:
         if USE_GENAI_CLIENT and hasattr(genai, "Client"):
-            _client_cache["client"] = genai.Client(api_key=api_key)
+            try:
+                # Cap each generation call so a hung model cannot block a
+                # request for minutes (the save path is async, but previews
+                # and match analyses run synchronously).
+                _client_cache["client"] = genai.Client(api_key=api_key, http_options={"timeout": 45000})
+            except TypeError:
+                _client_cache["client"] = genai.Client(api_key=api_key)
         else:
             genai.configure(api_key=api_key)
             _client_cache["client"] = "configured"

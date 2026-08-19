@@ -43,6 +43,25 @@ class Settings(BaseSettings):
     ]
     FRONTEND_URL: str = ""  # Vercel URL added in production
 
+    # Set true only when the API runs behind a reverse proxy that overwrites
+    # X-Forwarded-For with the real client IP. When false (default), rate
+    # limits key on the direct socket address so clients cannot spoof the
+    # header to bypass login/register/resend limits.
+    TRUST_PROXY_HEADERS: bool = False
+
+    # Email (SMTP) - used for registration email verification.
+    # When SMTP is not configured, new registrations are auto-verified
+    # (dev mode). Overridable from the admin Settings page.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_FROM_NAME: str = "JobApplicationTracker"
+    SMTP_BCC: str = ""  # optional blind copy address for outgoing emails
+    SMTP_TLS: bool = True
+    SMTP_SSL: bool = False
+
     # File Upload
     MAX_FILE_SIZE_MB: int = 10
     UPLOAD_DIR: str = "uploads"

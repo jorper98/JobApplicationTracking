@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.1.8",
+    version="1.1.9",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -69,6 +69,8 @@ def on_startup():
                     conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
                 if "updated_at" not in columns:
                     conn.execute(text("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE"))
+                if "verified" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN verified BOOLEAN NOT NULL DEFAULT TRUE"))
     except Exception as exc:
         print("users column check failed:", exc)
     # Legacy Clerk-era schema: replace clerk_id with password_hash and link
@@ -167,26 +169,27 @@ def on_startup():
                 "CREATE INDEX IF NOT EXISTS ix_job_analyses_resume_id ON job_analyses (resume_id)",
                 "CREATE INDEX IF NOT EXISTS ix_applications_user_id ON applications (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_applications_job_id ON applications (job_id)",
+                # A job is tracked exactly once. Dedupe any legacy duplicates
+                # (keep the newest row) before enforcing the unique index.
+                "DELETE FROM applications a USING applications b "
+                "WHERE a.user_id = b.user_id AND a.job_id = b.job_id AND a.created_at < b.created_at",
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_applications_user_job ON applications (user_id, job_id)",
             ):
                 conn.execute(text(index_sql))
     except Exception as exc:
         print("Index creation failed:", exc)
-    # Apply persisted AI settings overrides (admin Settings tab) on startup.
+    # Apply persisted settings overrides (admin Settings tab) on startup:
+    # AI model/API key and SMTP configuration.
     try:
         from app.db.database import SessionLocal
-        from app.models.models import AppSetting
+        from app.api.routes.admin import apply_persisted_overrides
         db = SessionLocal()
         try:
-            model_row = db.get(AppSetting, "gemini_model")
-            key_row = db.get(AppSetting, "gemini_api_key")
-            if model_row and model_row.value:
-                settings.GEMINI_MODEL = model_row.value
-            if key_row and key_row.value:
-                settings.GEMINI_API_KEY = key_row.value
+            apply_persisted_overrides(db)
         finally:
             db.close()
     except Exception as exc:
-        print("AI settings override load failed:", exc)
+        print("Settings override load failed:", exc)
     # Ensure jobs.company_id exists, then backfill company records from the
     # company name stored on each job.
     try:

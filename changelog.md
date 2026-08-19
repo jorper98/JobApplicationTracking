@@ -1,5 +1,81 @@
 # Changelog
 
+## v1.1.9
+
+### Features
+
+- Email verification (double opt-in): new registrations receive a
+  verification email and cannot log in until they confirm via the link;
+  auto-verified when SMTP is not configured
+- SMTP configuration in the admin Settings page (host, port, credentials,
+  TLS/SSL, from name/address, BCC), persisted server-side and applied
+  immediately, falling back to .env defaults
+- Resend verification email with rate limiting
+- New /verify-email page to confirm the token from the email link
+- Job notes: the note date can be edited after entry (Edit Note dialog)
+- Jobs page: detail panel is now responsive — the fixed 1400px minimum
+  width is gone; the layout stacks on smaller screens
+- Tracker Kanban: the delete action moved to the bottom of each card,
+  separated from the edit icon
+
+### Bug fixes
+
+- Saving a new job is now instant: AI skill extraction moved to a
+  background task instead of blocking the save request (Gemini could take
+  tens of seconds, causing client timeouts and spurious errors)
+- Job and tracker entry are created atomically: a new job always appears
+  in the tracker; a timed-out save can no longer leave a job that shows in
+  Jobs but is missing from the Tracker
+- AI calls now have a 45s timeout so a hung model cannot block requests;
+  frontend API timeout raised from 30s to 120s to cover slow URL scraping
+- Creating an application is idempotent: retries or stale clients cannot
+  create duplicate tracker entries for the same job
+
+### Security
+
+- Email verification tokens can no longer be used as session tokens: access
+  tokens now carry a `type` claim and `get_current_user` rejects any other
+  token type plus unverified users, closing a double opt-in bypass
+- Rate limits no longer trust a client-supplied `X-Forwarded-For` header
+  unless `TRUST_PROXY_HEADERS=true` (only set it behind a reverse proxy that
+  overwrites the header); the resend/register limits are no longer spoofable
+- Registration rolls back the account when the verification email cannot be
+  sent, so a misconfigured SMTP can no longer strand users in a permanent
+  "unverified" state with no recovery path (previously: swallowed error,
+  201 response, account locked out of login forever)
+- Clearing the SMTP password or Gemini API key in the admin Settings page now
+  takes effect immediately (an empty override restores the env default
+  instead of keeping the stale value in memory until restart)
+- The SMTP password and settings admin payload no longer expose an unused
+  `smtp_enabled` field
+
+### Reliability
+
+- Job and tracker entry are created in a single transaction, and a unique
+  `(user_id, job_id)` index on applications is enforced (existing duplicates
+  are deduplicated on startup), so a job can never exist without its tracker
+  entry
+- Background skill extraction no longer holds a DB connection across the AI
+  call, preventing connection-pool exhaustion under bursts of job saves
+- Editing a note's text no longer silently rewrites its date; `created_at`
+  is only sent when the date field actually changed
+- `POST /api/applications/` returns 409 when a job is already tracked with a
+  different status instead of silently discarding the requested status
+- Production image defaults to a single uvicorn worker (was 2): admin-saved
+  SMTP/AI settings and in-memory rate limits diverge between workers until
+  restart; the deployment guide documents this constraint
+- Production compose forwards the `SMTP_*`, `COOKIE_SECURE`, and
+  `TRUST_PROXY_HEADERS` variables to the backend (previously the documented
+  env SMTP path was silently dropped, leaving double opt-in disabled in
+  production)
+
+### Quality
+
+- Added pytest coverage for the verification flow (register, verify,
+  resend, rate limit)
+- Fixed useSearchParams Suspense boundary on /jobs and /verify-email so
+  `next build` succeeds
+
 ## v1.1.8
 
 ### Version bump

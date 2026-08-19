@@ -88,6 +88,7 @@ class JobNoteCreate(BaseModel):
 
 class JobNoteUpdate(BaseModel):
     note: str = Field(min_length=1)
+    created_at: Optional[datetime] = None
 
 
 class JobNoteResponse(BaseModel):

@@ -166,12 +166,8 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
       if (job) {
         savedJob = await api.updateJob(job.id, { ...payload, created_at: form.createdAt ? new Date(form.createdAt).toISOString() : null });
       } else {
+        // The backend saves the job AND its tracker entry atomically.
         savedJob = await api.createJob(payload);
-        try {
-          await api.createApplication(savedJob.id, "saved");
-        } catch (e) {
-          console.error("Could not create saved application:", e);
-        }
       }
       onSave(savedJob);
       onClose();
@@ -195,11 +191,6 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
         location: preview.location,
       };
       const savedJob = await api.createJob(payload);
-      try {
-        await api.createApplication(savedJob.id, "saved");
-      } catch (e) {
-        console.error("Could not create saved application:", e);
-      }
       onSave(savedJob);
       onClose();
     } catch (e: any) {

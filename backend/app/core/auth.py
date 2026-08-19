@@ -44,8 +44,34 @@ def create_access_token(user: User) -> str:
             detail="JWT_SECRET is not configured in the backend environment",
         )
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    payload = {"sub": user.id, "email": user.email, "exp": expires}
+    payload = {"sub": user.id, "email": user.email, "type": "access", "exp": expires}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+
+
+def create_email_verification_token(user_id: str, expires_hours: int = 24) -> str:
+    """Create a short-lived JWT used to verify a new user's email."""
+    if not settings.JWT_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail="JWT_SECRET is not configured in the backend environment",
+        )
+    expires = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
+    payload = {"sub": user_id, "type": "verify_email", "exp": expires}
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+
+
+def decode_email_verification_token(token: str) -> str:
+    """Decode a verification token and return the user id.
+
+    Raises HTTPException(400) for invalid, expired, or wrong-purpose tokens.
+    """
+    try:
+        claims = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    if claims.get("type") != "verify_email" or not claims.get("sub"):
+        raise HTTPException(status_code=400, detail="Invalid verification link")
+    return claims["sub"]
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -67,9 +93,22 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # Only session tokens authenticate. Email verification tokens are signed
+    # with the same secret and must never be usable as session credentials
+    # (tokens minted before the "access" type was added have no type claim).
+    if claims.get("type") not in (None, "access"):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     user = db.query(User).filter(User.id == claims.get("sub")).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Double opt-in gate: unverified users cannot open sessions, even with a
+    # valid token, until they confirm their email address.
+    if not user.verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before logging in. Check your inbox (or spam folders) for the verification link.",
+        )
     return user
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -85,7 +85,7 @@ function SkillPills({ skills, tone }: { skills: string[]; tone: "green" | "red" 
   );
 }
 
-export default function JobsPage() {
+function JobsContent() {
   const searchParams = useSearchParams();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
@@ -112,6 +112,8 @@ export default function JobsPage() {
   const [coverLetterResumeId, setCoverLetterResumeId] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<JobNote | null>(null);
   const [editText, setEditText] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editDateOriginal, setEditDateOriginal] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
   const inputClass =
@@ -373,7 +375,15 @@ export default function JobsPage() {
     if (!selectedJob || !editingNote || !editText.trim()) return;
     setEditSaving(true);
     try {
-      const updated = await api.updateJobNote(selectedJob.id, editingNote.id, editText.trim());
+      // Only rewrite created_at when the user actually changed the date;
+      // text-only edits must keep the original timestamp.
+      const dateChanged = editDate !== editDateOriginal;
+      const updated = await api.updateJobNote(
+        selectedJob.id,
+        editingNote.id,
+        editText.trim(),
+        dateChanged && editDate ? new Date(editDate + "T00:00:00").toISOString() : undefined
+      );
       setJobNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
       setEditingNote(null);
     } catch (e: any) {
@@ -515,9 +525,9 @@ export default function JobsPage() {
         )}
       </div>
 
-      <div className="flex items-start gap-6">
+      <div className="flex flex-col xl:flex-row items-start gap-6">
         {/* Jobs list */}
-        <div className="w-[420px] shrink-0 space-y-2">
+        <div className="w-full xl:w-[420px] xl:shrink-0 space-y-2">
           {filteredJobs.map((job) => (
             <div
               key={job.id}
@@ -580,7 +590,7 @@ export default function JobsPage() {
         </div>
 
         {/* Detail panel */}
-        <div className="flex-1 min-w-[1400px]">
+        <div className="w-full flex-1 min-w-0">
           {selectedJob ? (
             <div className="bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-xl p-6">
               {/* Header */}
@@ -690,6 +700,9 @@ export default function JobsPage() {
                                 onClick={() => {
                                   setEditingNote(note);
                                   setEditText(note.note);
+                                  const d = note.created_at ? new Date(note.created_at).toLocaleDateString("en-CA") : "";
+                                  setEditDate(d);
+                                  setEditDateOriginal(d);
                                 }}
                                 title="Edit note"
                                 className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-colors"
@@ -862,6 +875,15 @@ export default function JobsPage() {
                 className={inputClass + " resize-none w-full"}
                 placeholder="Edit note..."
               />
+              <div className="mt-3">
+                <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Date</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className={inputClass + " w-full"}
+                />
+              </div>
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleEditNote}
@@ -1107,5 +1129,19 @@ export default function JobsPage() {
         onSave={handleModalSave}
       />
     </PageShell>
+  );
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense
+      fallback={
+        <PageShell>
+          <p className="text-gray-500 dark:text-[#8b8b96]">Loading jobs…</p>
+        </PageShell>
+      }
+    >
+      <JobsContent />
+    </Suspense>
   );
 }

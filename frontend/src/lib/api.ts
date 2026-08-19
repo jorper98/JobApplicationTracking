@@ -4,7 +4,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8136";
 
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 120000,
   withCredentials: true,
 });
 
@@ -23,6 +23,14 @@ export const api = {
   },
   me: async () => {
     const { data } = await client.get("/api/auth/me");
+    return data;
+  },
+  verifyEmail: async (token: string) => {
+    const { data } = await client.get(`/api/auth/verify-email?token=${encodeURIComponent(token)}`);
+    return data;
+  },
+  resendVerification: async (email: string) => {
+    const { data } = await client.post("/api/auth/resend-verification", { email });
     return data;
   },
   // Admin: user management
@@ -49,6 +57,19 @@ export const api = {
   },
   updateAISettings: async (payload: { gemini_model?: string; gemini_api_key?: string }) => {
     const { data } = await client.put("/api/users/settings/ai", payload);
+    return data;
+  },
+  // Admin: SMTP settings
+  getSmtpSettings: async () => {
+    const { data } = await client.get("/api/users/settings/smtp");
+    return data;
+  },
+  updateSmtpSettings: async (payload: Record<string, unknown>) => {
+    const { data } = await client.put("/api/users/settings/smtp", payload);
+    return data;
+  },
+  testSmtpSettings: async () => {
+    const { data } = await client.post("/api/users/settings/smtp/test");
     return data;
   },
   // Resume
@@ -113,8 +134,11 @@ export const api = {
     const { data } = await client.post(`/api/jobs/${jobId}/notes`, { note });
     return data;
   },
-  updateJobNote: async (jobId: string, noteId: string, note: string) => {
-    const { data } = await client.patch(`/api/jobs/${jobId}/notes/${noteId}`, { note });
+  updateJobNote: async (jobId: string, noteId: string, note: string, createdAt?: string) => {
+    const { data } = await client.patch(`/api/jobs/${jobId}/notes/${noteId}`, {
+      note,
+      ...(createdAt ? { created_at: createdAt } : {}),
+    });
     return data;
   },
   deleteJobNote: async (jobId: string, noteId: string) => {

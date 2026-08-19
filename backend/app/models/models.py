@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, String, Integer, Float, Text, DateTime, ForeignKey,
-    Boolean, JSON, Enum
+    Boolean, JSON, Enum, text
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -38,6 +38,8 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     is_admin = Column(Boolean, nullable=False, default=False)
+    # Email verification (double opt-in). Existing rows default to verified.
+    verified = Column(Boolean, nullable=False, server_default=text("true"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

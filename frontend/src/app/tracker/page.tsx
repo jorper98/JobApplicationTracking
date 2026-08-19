@@ -189,22 +189,23 @@ export default function TrackerPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-col items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link
-                        href={`/jobs?job_id=${card.job_id}`}
-                        title="Edit in Jobs"
-                        className="text-gray-400 dark:text-[#5a5a64] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-0.5"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(card.id, key)}
-                        className="text-gray-400 dark:text-[#5a5a64] hover:text-red-600 dark:text-red-400 transition-colors p-0.5"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <Link
+                      href={`/jobs?job_id=${card.job_id}`}
+                      title="Edit in Jobs"
+                      className="shrink-0 text-gray-400 dark:text-[#5a5a64] hover:text-indigo-600 dark:hover:text-indigo-400 transition-all p-0.5 opacity-0 group-hover:opacity-100"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                  <div className="flex items-center justify-end mt-2.5 pt-2.5 border-t border-gray-100 dark:border-white/[0.06]">
+                    <button
+                      onClick={() => handleDelete(card.id, key)}
+                      className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-[#5a5a64] hover:text-red-600 dark:hover:text-red-400 transition-colors p-0.5"
+                      title="Remove"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Remove
+                    </button>
                   </div>
                 </div>
               ))}

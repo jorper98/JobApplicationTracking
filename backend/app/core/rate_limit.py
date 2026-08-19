@@ -18,6 +18,8 @@ LOGIN_MAX_FAILED_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 15 * 60
 REGISTER_IP_LIMIT = 5
 REGISTER_WINDOW_SECONDS = 60 * 60
+RESEND_IP_LIMIT = 3
+RESEND_WINDOW_SECONDS = 60 * 60
 
 
 class SlidingWindowLimiter:
@@ -56,9 +58,12 @@ ai_limiter = SlidingWindowLimiter()
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # Only honor the proxy header when a trusted reverse proxy is configured;
+    # otherwise clients could spoof it to bypass the rate limits.
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -74,6 +79,13 @@ def register_rate_limit(request: Request) -> None:
         f"ip:register:{client_ip(request)}", REGISTER_IP_LIMIT, REGISTER_WINDOW_SECONDS
     ):
         raise HTTPException(status_code=429, detail="Too many registrations from this address. Try again later.")
+
+
+def resend_rate_limit(request: Request) -> None:
+    if not auth_limiter.check_and_record(
+        f"ip:resend:{client_ip(request)}", RESEND_IP_LIMIT, RESEND_WINDOW_SECONDS
+    ):
+        raise HTTPException(status_code=429, detail="Too many verification emails requested. Try again later.")
 
 
 def check_account_lockout(email: str) -> None:

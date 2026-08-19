@@ -4,27 +4,54 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader, PageShell } from "@/components/PageShell";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Send } from "lucide-react";
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+
+  // AI settings
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [keySet, setKeySet] = useState(false);
   const [clearKey, setClearKey] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState("");
+
+  // SMTP settings
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState(587);
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpPasswordSet, setSmtpPasswordSet] = useState(false);
+  const [smtpFrom, setSmtpFrom] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("");
+  const [smtpBcc, setSmtpBcc] = useState("");
+  const [smtpTls, setSmtpTls] = useState(true);
+  const [smtpSsl, setSmtpSsl] = useState(false);
+
+  const [savingAi, setSavingAi] = useState(false);
+  const [savingSmtp, setSavingSmtp] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [smtpMessage, setSmtpMessage] = useState<string | null>(null);
+  const [aiError, setAiError] = useState("");
+  const [smtpError, setSmtpError] = useState("");
 
   useEffect(() => {
-    api
-      .getAISettings()
-      .then((data) => {
-        setModel(data.gemini_model);
-        setKeySet(data.gemini_api_key_set);
+    Promise.all([api.getAISettings(), api.getSmtpSettings()])
+      .then(([ai, smtp]) => {
+        setModel(ai.gemini_model);
+        setKeySet(ai.gemini_api_key_set);
+        setSmtpHost(smtp.smtp_host);
+        setSmtpPort(smtp.smtp_port);
+        setSmtpUser(smtp.smtp_user);
+        setSmtpPasswordSet(smtp.smtp_password_set);
+        setSmtpFrom(smtp.smtp_from);
+        setSmtpFromName(smtp.smtp_from_name);
+        setSmtpBcc(smtp.smtp_bcc);
+        setSmtpTls(smtp.smtp_tls);
+        setSmtpSsl(smtp.smtp_ssl);
       })
-      .catch((e) => setError(e?.response?.data?.detail || "Failed to load settings"))
+      .catch((e) => setAiError(e?.response?.data?.detail || "Failed to load settings"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -51,10 +78,10 @@ export default function SettingsPage() {
   const inputClass =
     "w-full bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500";
 
-  const handleSave = async () => {
-    setSaving(true);
-    setMessage(null);
-    setError("");
+  const handleSaveAi = async () => {
+    setSavingAi(true);
+    setAiMessage(null);
+    setAiError("");
     try {
       const payload: { gemini_model?: string; gemini_api_key?: string } = {};
       if (model.trim()) payload.gemini_model = model.trim();
@@ -68,19 +95,62 @@ export default function SettingsPage() {
       setKeySet(data.gemini_api_key_set);
       setApiKey("");
       setClearKey(false);
-      setMessage("Settings saved");
+      setAiMessage("AI settings saved");
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Failed to save settings");
+      setAiError(e?.response?.data?.detail || "Failed to save AI settings");
     } finally {
-      setSaving(false);
+      setSavingAi(false);
+    }
+  };
+
+  const handleSaveSmtp = async () => {
+    setSavingSmtp(true);
+    setSmtpMessage(null);
+    setSmtpError("");
+    try {
+      const payload: Record<string, unknown> = {
+        smtp_host: smtpHost.trim(),
+        smtp_port: smtpPort,
+        smtp_user: smtpUser.trim(),
+        smtp_from: smtpFrom.trim(),
+        smtp_from_name: smtpFromName.trim(),
+        smtp_bcc: smtpBcc.trim(),
+        smtp_tls: smtpTls,
+        smtp_ssl: smtpSsl,
+      };
+      if (smtpPassword.trim()) payload.smtp_password = smtpPassword.trim();
+      const data = await api.updateSmtpSettings(payload);
+      setSmtpPasswordSet(data.smtp_password_set);
+      setSmtpPassword("");
+      setSmtpMessage("SMTP settings saved");
+    } catch (e: any) {
+      setSmtpError(e?.response?.data?.detail || "Failed to save SMTP settings");
+    } finally {
+      setSavingSmtp(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setTestingSmtp(true);
+    setSmtpMessage(null);
+    setSmtpError("");
+    try {
+      const data = await api.testSmtpSettings();
+      setSmtpMessage(data.message);
+    } catch (e: any) {
+      setSmtpError(e?.response?.data?.detail || "SMTP test failed");
+    } finally {
+      setTestingSmtp(false);
     }
   };
 
   return (
     <PageShell maxWidth="max-w-2xl">
-      <PageHeader title="Settings" subtitle="Manage the global AI configuration (admin only)" />
+      <PageHeader title="Settings" subtitle="Manage the global configuration (admin only)" />
 
-      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6 space-y-4">
+      {/* AI settings */}
+      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6 space-y-4 mb-6">
+        <h2 className="font-semibold text-gray-900 dark:text-white">AI settings</h2>
         <div>
           <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">AI model</label>
           <input
@@ -121,17 +191,151 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {message && <p className="text-sm text-emerald-600 dark:text-emerald-400">{message}</p>}
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {aiMessage && <p className="text-sm text-emerald-600 dark:text-emerald-400">{aiMessage}</p>}
+        {aiError && <p className="text-sm text-red-600 dark:text-red-400">{aiError}</p>}
+
+        <button
+          onClick={handleSaveAi}
+          disabled={savingAi}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Save className="w-4 h-4" />
+          {savingAi ? "Saving..." : "Save AI Settings"}
+        </button>
+      </div>
+
+      {/* SMTP settings */}
+      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6 space-y-4">
+        <div>
+          <h2 className="font-semibold text-gray-900 dark:text-white">SMTP settings</h2>
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Used to send registration verification emails (double opt-in). When SMTP is not configured, new
+            registrations are auto-verified.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">SMTP host</label>
+            <input
+              type="text"
+              value={smtpHost}
+              onChange={(e) => setSmtpHost(e.target.value)}
+              placeholder="e.g. smtp.gmail.com"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Port</label>
+            <input
+              type="number"
+              value={smtpPort}
+              onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">SMTP user</label>
+          <input
+            type="text"
+            value={smtpUser}
+            onChange={(e) => setSmtpUser(e.target.value)}
+            placeholder="e.g. you@gmail.com"
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">SMTP password</label>
+          <input
+            type="password"
+            value={smtpPassword}
+            onChange={(e) => setSmtpPassword(e.target.value)}
+            placeholder={smtpPasswordSet ? "•••••••• (a password is set — type to replace it)" : "App password or API key"}
+            className={inputClass}
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">From email</label>
+            <input
+              type="email"
+              value={smtpFrom}
+              onChange={(e) => setSmtpFrom(e.target.value)}
+              placeholder="noreply@yourdomain.com"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">From name</label>
+            <input
+              type="text"
+              value={smtpFromName}
+              onChange={(e) => setSmtpFromName(e.target.value)}
+              placeholder="JobApplicationTracker"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">BCC (optional)</label>
+          <input
+            type="email"
+            value={smtpBcc}
+            onChange={(e) => setSmtpBcc(e.target.value)}
+            placeholder="blind copy address for outgoing emails"
+            className={inputClass}
+          />
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Every outgoing email (verification, test) is blind-copied to this address.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#8b8b96] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={smtpTls}
+              onChange={(e) => setSmtpTls(e.target.checked)}
+              className="accent-indigo-600"
+            />
+            STARTTLS
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-[#8b8b96] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={smtpSsl}
+              onChange={(e) => setSmtpSsl(e.target.checked)}
+              className="accent-indigo-600"
+            />
+            SSL (implicit)
+          </label>
+        </div>
+
+        {smtpMessage && <p className="text-sm text-emerald-600 dark:text-emerald-400">{smtpMessage}</p>}
+        {smtpError && <p className="text-sm text-red-600 dark:text-red-400">{smtpError}</p>}
 
         <div className="flex gap-3 pt-2">
           <button
-            onClick={handleSave}
-            disabled={saving}
+            onClick={handleSaveSmtp}
+            disabled={savingSmtp}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Save className="w-4 h-4" />
-            {saving ? "Saving..." : "Save Settings"}
+            {savingSmtp ? "Saving..." : "Save SMTP Settings"}
+          </button>
+          <button
+            onClick={handleTestSmtp}
+            disabled={testingSmtp}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-[#c0c0c8] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-100 dark:hover:bg-white/[0.06] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Send className="w-4 h-4" />
+            {testingSmtp ? "Sending..." : "Send test email"}
           </button>
         </div>
       </div>

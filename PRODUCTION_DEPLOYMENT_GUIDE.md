@@ -82,7 +82,7 @@ No build artifacts, no git history, no secrets.
 SFTP the zip to the server, then:
 
 ```bash
-unzip jobtracker-distribution-v1.1.8.zip -d /docker/jobtracker
+unzip jobtracker-distribution-v1.1.9.zip -d /docker/jobtracker
 cd /docker/jobtracker
 ls -la              # confirm docker-compose.prod.example.yml is present
 ls -la deploy/      # confirm .env.prod.example is present
@@ -114,8 +114,25 @@ GEMINI_API_KEY=<your-gemini-key>
 GEMINI_MODEL=gemini-3.6-flash
 # Optional: fallback models tried in order when the primary is unavailable.
 GEMINI_FALLBACK_MODELS=["gemini-3.6-flash","gemini-3.5-flash-lite"]
+# SMTP - registration email verification (double opt-in). These vars are
+# forwarded to the backend by docker-compose.prod.yml (see the backend
+# environment block). All SMTP values can also be configured from the admin
+# Settings page (persisted in the DB).
+SMTP_HOST=smtp.yourprovider.com
+SMTP_PORT=587
+SMTP_USER=no-reply@yourdomain.com
+SMTP_PASSWORD=<smtp-password-or-app-key>
+SMTP_FROM=no-reply@yourdomain.com
+SMTP_FROM_NAME=JobApplicationTracker
+# Optional: blind-copy every outgoing email to this address.
+SMTP_BCC=
+SMTP_TLS=true
+SMTP_SSL=false
 DEBUG=false
 COOKIE_SECURE=true
+# True only when a reverse proxy overwrites X-Forwarded-For with the real
+# client IP (so login/register/resend rate limits can't be spoofed).
+TRUST_PROXY_HEADERS=false
 FRONTEND_URL=https://yourdomain.com
 ALLOWED_ORIGINS=["https://yourdomain.com"]
 NEXT_PUBLIC_API_URL=https://yourdomain.com
@@ -147,6 +164,16 @@ in with the admin account bootstrapped from `DEFAULT_ADMIN_EMAIL` /
 is empty, a random password is generated and printed in the backend logs on
 first startup. New registrations never receive admin rights.
 
+**Email verification (double opt-in):** with SMTP configured, new
+registrations receive a verification email and cannot log in until they
+confirm via the link. The link points to `FRONTEND_URL` — set it to your
+public site URL. Without SMTP, registrations are auto-verified (dev mode).
+
+The backend image runs a single uvicorn worker by default. Do not raise
+`UVICORN_WORKERS` unless the configuration source is made shared across
+processes: SMTP/AI overrides saved in the admin Settings page are applied
+to in-process settings and would diverge between workers until restart.
+
 > `NEXT_PUBLIC_API_URL` is read at **build time** by Next.js and inlined
 > into the JS bundle. Passing `--env-file deploy/.env.prod` to docker compose
 > makes that value available both to the frontend image build args and the
@@ -161,7 +188,7 @@ install — only application files are replaced:
 
 ```bash
 cd /docker/jobtracker
-unzip -o jobtracker-distribution-v1.1.8.zip
+unzip -o jobtracker-distribution-v1.1.9.zip
 docker compose --env-file deploy/.env.prod -f docker-compose.prod.yml up -d --build
 ```
 
@@ -169,6 +196,26 @@ Preserved on every upgrade:
 - `docker-compose.prod.yml` (your customized copy)
 - `deploy/.env.prod` (secrets)
 - `pgdata` and `uploads` volumes (all data)
+
+Because those files are preserved, new settings shipped by an upgrade are
+**not** applied automatically. For v1.1.9, merge these into your live
+`docker-compose.prod.yml` (backend `environment:` block) and `deploy/.env.prod`:
+
+- `docker-compose.prod.yml`: forward the `SMTP_*`, `COOKIE_SECURE`, and
+  `TRUST_PROXY_HEADERS` variables (compare with the newly shipped
+  `docker-compose.prod.example.yml`).
+- `deploy/.env.prod`: add `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/BCC/
+  TLS/SSL`, set `COOKIE_SECURE=true`, and set `TRUST_PROXY_HEADERS=true` if
+  a reverse proxy fronts the API (as in section 6).
+
+If you prefer, copy the new example templates over your files and re-enter
+your values:
+`cp docker-compose.prod.example.yml docker-compose.prod.yml` and
+`cp deploy/.env.prod.example deploy/.env.prod` (then fill in secrets).
+
+Existing users and sessions are unaffected by the upgrade: the `verified`
+column is added with a default of true (existing accounts stay verified),
+and previously issued session tokens remain valid.
 ---
 
 ## 6. Reverse proxy + HTTPS

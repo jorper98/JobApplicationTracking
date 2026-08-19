@@ -15,4 +15,8 @@ RUN mkdir -p uploads && chown -R 10001:10001 /app
 USER 10001
 
 EXPOSE 8136
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8136} --workers ${UVICORN_WORKERS:-2}
+# Single worker by default: settings saved via the admin UI (SMTP, AI keys)
+# are applied to in-process settings, and rate limits are per-process. With
+# multiple workers they would diverge until restart. Set UVICORN_WORKERS>1
+# only when the config source is made shared across processes.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8136} --workers ${UVICORN_WORKERS:-1}

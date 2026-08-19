@@ -6,6 +6,7 @@ from app.core.auth import get_current_admin, hash_password
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import AppSetting, User
+from app.services.email_service import send_email, smtp_configured
 
 router = APIRouter()
 
@@ -59,6 +60,7 @@ def create_user(data: AdminCreateUser, admin: User = Depends(get_current_admin),
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         is_admin=data.is_admin,
+        verified=True,  # admin-created accounts are trusted
     )
     db.add(user)
     db.commit()
@@ -128,6 +130,49 @@ def _set_setting(db: Session, key: str, value: str) -> None:
         row.value = value
 
 
+_SMTP_SETTING_KEYS = (
+    "smtp_host",
+    "smtp_port",
+    "smtp_user",
+    "smtp_password",
+    "smtp_from",
+    "smtp_from_name",
+    "smtp_bcc",
+    "smtp_tls",
+    "smtp_ssl",
+)
+
+_AI_SETTING_KEYS = ("gemini_model", "gemini_api_key")
+_ALL_OVERRIDE_KEYS = _AI_SETTING_KEYS + _SMTP_SETTING_KEYS
+# Env/default values captured once at import so a cleared override restores
+# the original value instead of leaving a stale one active in memory.
+_OVERRIDE_DEFAULTS = {key: getattr(settings, key.upper()) for key in _ALL_OVERRIDE_KEYS}
+
+
+def apply_persisted_overrides(db: Session) -> None:
+    """Load AI + SMTP overrides from app_settings into the live settings.
+
+    An empty or missing stored value restores the env default, so clearing a
+    setting in the admin UI takes effect immediately, not only after restart.
+    """
+    for key in _ALL_OVERRIDE_KEYS:
+        row = db.get(AppSetting, key)
+        attribute = key.upper()
+        if row is None or row.value == "":
+            setattr(settings, attribute, _OVERRIDE_DEFAULTS[key])
+            continue
+        current = getattr(settings, attribute)
+        if isinstance(current, bool):
+            setattr(settings, attribute, row.value.lower() in ("1", "true", "yes"))
+        elif isinstance(current, int):
+            try:
+                setattr(settings, attribute, int(row.value))
+            except ValueError:
+                pass
+        else:
+            setattr(settings, attribute, row.value)
+
+
 @router.get("/settings/ai", response_model=AISettingsResponse)
 def get_ai_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """Return the active AI model and whether an API key override is set (admin only)."""
@@ -147,14 +192,106 @@ def update_ai_settings(
 ):
     """Persist AI model/API key overrides and apply them immediately (admin only)."""
     if data.gemini_model is not None:
-        _set_setting(db, "gemini_model", data.gemini_model.strip() or settings.GEMINI_MODEL)
+        _set_setting(db, "gemini_model", data.gemini_model.strip())
     if data.gemini_api_key is not None:
         _set_setting(db, "gemini_api_key", data.gemini_api_key.strip())
     db.commit()
+    apply_persisted_overrides(db)
 
     model = _get_setting(db, "gemini_model") or settings.GEMINI_MODEL
     api_key = _get_setting(db, "gemini_api_key") or ""
-    settings.GEMINI_MODEL = model
-    settings.GEMINI_API_KEY = api_key
     return {"gemini_model": model, "gemini_api_key_set": bool(api_key)}
+
+
+class SmtpSettingsResponse(BaseModel):
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_from: str
+    smtp_from_name: str
+    smtp_bcc: str
+    smtp_tls: bool
+    smtp_ssl: bool
+    smtp_password_set: bool
+
+
+class SmtpSettingsUpdate(BaseModel):
+    smtp_host: str | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_user: str | None = None
+    smtp_password: str | None = None  # None = keep, "" = clear
+    smtp_from: str | None = None
+    smtp_from_name: str | None = None
+    smtp_bcc: str | None = None
+    smtp_tls: bool | None = None
+    smtp_ssl: bool | None = None
+
+
+def _bool_setting(db: Session, key: str, default: bool) -> bool:
+    value = _get_setting(db, key)
+    return (value or "").lower() in ("1", "true", "yes") if value else default
+
+
+def _smtp_payload(db: Session) -> dict:
+    stored_password = _get_setting(db, "smtp_password")
+    return {
+        "smtp_host": _get_setting(db, "smtp_host") or settings.SMTP_HOST,
+        "smtp_port": _get_setting(db, "smtp_port") or settings.SMTP_PORT,
+        "smtp_user": _get_setting(db, "smtp_user") or settings.SMTP_USER,
+        "smtp_from": _get_setting(db, "smtp_from") or settings.SMTP_FROM,
+        "smtp_from_name": _get_setting(db, "smtp_from_name") or settings.SMTP_FROM_NAME,
+        "smtp_bcc": _get_setting(db, "smtp_bcc") or settings.SMTP_BCC,
+        "smtp_tls": _bool_setting(db, "smtp_tls", settings.SMTP_TLS),
+        "smtp_ssl": _bool_setting(db, "smtp_ssl", settings.SMTP_SSL),
+        "smtp_password_set": bool(stored_password),
+    }
+
+
+@router.get("/settings/smtp", response_model=SmtpSettingsResponse)
+def get_smtp_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Return the active SMTP configuration (admin only)."""
+    return _smtp_payload(db)
+
+
+@router.put("/settings/smtp", response_model=SmtpSettingsResponse)
+def update_smtp_settings(
+    data: SmtpSettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Persist SMTP configuration and apply it immediately (admin only)."""
+    if data.smtp_host is not None:
+        _set_setting(db, "smtp_host", data.smtp_host.strip())
+    if data.smtp_port is not None:
+        _set_setting(db, "smtp_port", str(data.smtp_port))
+    if data.smtp_user is not None:
+        _set_setting(db, "smtp_user", data.smtp_user.strip())
+    if data.smtp_password is not None:
+        _set_setting(db, "smtp_password", data.smtp_password.strip())
+    if data.smtp_from is not None:
+        _set_setting(db, "smtp_from", data.smtp_from.strip())
+    if data.smtp_from_name is not None:
+        _set_setting(db, "smtp_from_name", data.smtp_from_name.strip())
+    if data.smtp_bcc is not None:
+        _set_setting(db, "smtp_bcc", data.smtp_bcc.strip())
+    if data.smtp_tls is not None:
+        _set_setting(db, "smtp_tls", "true" if data.smtp_tls else "false")
+    if data.smtp_ssl is not None:
+        _set_setting(db, "smtp_ssl", "true" if data.smtp_ssl else "false")
+    db.commit()
+    apply_persisted_overrides(db)
+    return _smtp_payload(db)
+
+
+@router.post("/settings/smtp/test")
+def test_smtp_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Send a test email to the current admin (admin only)."""
+    apply_persisted_overrides(db)
+    if not smtp_configured():
+        raise HTTPException(status_code=400, detail="SMTP is not configured")
+    try:
+        send_email(admin.email, "JobApplicationTracker SMTP test", "<p>Your SMTP configuration works.</p>")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"SMTP test failed: {exc}")
+    return {"message": f"Test email sent to {admin.email}"}
 
