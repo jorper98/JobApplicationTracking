@@ -47,6 +47,7 @@ class User(Base):
     applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
     jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan")
     companies = relationship("Company", back_populates="user", cascade="all, delete-orphan")
+    ai_usage = relationship("AIUsage", back_populates="user", cascade="all, delete-orphan")
 
 
 class Resume(Base):
@@ -160,6 +161,24 @@ class Application(Base):
 
     user = relationship("User", back_populates="applications")
     job = relationship("Job", back_populates="applications")
+
+
+class AIUsage(Base):
+    __tablename__ = "ai_usage"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    feature = Column(String, nullable=False, index=True)
+    model = Column(String, nullable=True)
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    cost = Column(Float, nullable=False, default=0.0)  # estimated USD
+    status = Column(String, nullable=False, default="success")  # success | failed
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="ai_usage")
 
 
 

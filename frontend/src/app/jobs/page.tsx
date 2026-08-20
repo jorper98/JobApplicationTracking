@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { type Job } from "@/lib/types";
-import { Loader2, Plus, Trash2, Pencil, Search, X, FileText } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Search, X, FileText, Eye } from "lucide-react";
 import { JobModal } from "@/components/JobModal";
+import { JobDescriptionModal } from "@/components/JobDescriptionModal";
 import { PageShell } from "@/components/PageShell";
 
 interface JobNote {
@@ -97,6 +98,8 @@ function JobsContent() {
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [pinnedJobId, setPinnedJobId] = useState<string | null>(null);
+  const [descJob, setDescJob] = useState<Job | null>(null);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [activeTab, setActiveTab] = useState<"notes" | "resumes">("notes");
@@ -115,6 +118,8 @@ function JobsContent() {
   const [editDate, setEditDate] = useState("");
   const [editDateOriginal, setEditDateOriginal] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   const inputClass =
     "bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500";
@@ -161,6 +166,7 @@ function JobsContent() {
     const job = jobs.find((j) => j.id === jobId);
     if (job) {
       deepLinkedRef.current = true;
+      setPinnedJobId(jobId);
       handleSelectJob(job);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,6 +181,13 @@ function JobsContent() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerResumeId]);
+
+  // When a job is selected from a long list, scroll the detail pane into view
+  useEffect(() => {
+    if (selectedJob) {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedJob]);
 
   // Close the cover letter modal on Esc
   useEffect(() => {
@@ -246,6 +259,10 @@ function JobsContent() {
       .toLowerCase();
     return haystack.includes(q);
   });
+
+  const orderedJobs = pinnedJobId
+    ? [...filteredJobs].sort((a, b) => (a.id === pinnedJobId ? -1 : b.id === pinnedJobId ? 1 : 0))
+    : filteredJobs;
 
   const openAddModal = () => {
     setEditingJob(null);
@@ -528,7 +545,7 @@ function JobsContent() {
       <div className="flex flex-col xl:flex-row items-start gap-6">
         {/* Jobs list */}
         <div className="w-full xl:w-[420px] xl:shrink-0 space-y-2">
-          {filteredJobs.map((job) => (
+          {orderedJobs.map((job) => (
             <div
               key={job.id}
               className={`w-full bg-white dark:bg-[#16161f] border rounded-xl p-4 transition-colors ${
@@ -546,6 +563,15 @@ function JobsContent() {
                   </div>
                 </button>
                 <div className="flex items-center gap-1 shrink-0">
+                  {job.description && (
+                    <button
+                      onClick={() => setDescJob(job)}
+                      title="View job description"
+                      className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => openEditModal(job)}
                     title="Edit"
@@ -590,15 +616,26 @@ function JobsContent() {
         </div>
 
         {/* Detail panel */}
-        <div className="w-full flex-1 min-w-0">
+        <div ref={detailRef} className="w-full flex-1 min-w-0 scroll-mt-28">
           {selectedJob ? (
             <div className="bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-xl p-6">
               {/* Header */}
               <div className="flex items-center justify-between gap-4 mb-5">
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900 dark:text-white">
-                    {selectedJob.title} @ {selectedJob.company}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-semibold text-gray-900 dark:text-white truncate">
+                      {selectedJob.title} @ {selectedJob.company}
+                    </h2>
+                    {selectedJob.description && (
+                      <button
+                        onClick={() => setDescJob(selectedJob)}
+                        title="View job description"
+                        className="p-1 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shrink-0"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                   {selectedJob.location && (
                     <p className="text-gray-500 dark:text-[#8b8b96] text-sm">{selectedJob.location}</p>
                   )}
@@ -1127,6 +1164,16 @@ function JobsContent() {
         onClose={() => setModalOpen(false)}
         job={editingJob || undefined}
         onSave={handleModalSave}
+      />
+
+      <JobDescriptionModal
+        open={!!descJob}
+        onClose={() => setDescJob(null)}
+        jobId={descJob?.id}
+        title={descJob?.title || ""}
+        company={descJob?.company}
+        description={descJob?.description}
+        url={descJob?.url}
       />
     </PageShell>
   );

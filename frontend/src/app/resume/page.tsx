@@ -1,10 +1,11 @@
 "use client";
 
-import { Upload, CheckCircle, FileText, Loader2, Trash2 } from "lucide-react";
+import { Upload, CheckCircle, FileText, Loader2, Trash2, Eye } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { PageHeader, PageShell } from "@/components/PageShell";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
+import { ResumeModal } from "@/components/ResumeModal";
 
 
 interface Resume {
@@ -20,6 +21,7 @@ export default function ResumePage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [viewResume, setViewResume] = useState<Resume | null>(null);
 
   useEffect(() => {
     api.listResumes().then(setResumes).catch(console.error);
@@ -130,6 +132,13 @@ export default function ResumePage() {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setViewResume(r)}
+                  className="text-gray-400 dark:text-[#5a5a64] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1"
+                  title="View resume text"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
                 {r.is_active ? (
                   <CheckCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 ) : (
@@ -152,6 +161,12 @@ export default function ResumePage() {
           ))}
         </div>
       )}
+
+      <ResumeModal
+        resumeId={viewResume?.id || null}
+        filename={viewResume?.filename || ""}
+        onClose={() => setViewResume(null)}
+      />
     </PageShell>
   );
 }

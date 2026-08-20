@@ -5,7 +5,7 @@ from app.db.database import get_db
 from app.models.models import Resume, User
 from app.schemas.schemas import ResumeResponse
 from app.services.resume_service import extract_text_from_pdf, save_upload
-from app.services.ai_service import extract_skills_from_resume
+from app.services.ai_service import extract_skills_from_resume, track_usage
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.rate_limit import ai_quota_limit
@@ -41,7 +41,8 @@ async def upload_resume(
 
     # Extract skills with AI (fallback to empty skill list if the model call fails)
     try:
-        extracted_skills = extract_skills_from_resume(raw_text)
+        with track_usage(user.id, "extract_resume_skills"):
+            extracted_skills = extract_skills_from_resume(raw_text)
     except Exception as exc:
         print("AI skill extraction failed, continuing with empty skill list:", exc)
         extracted_skills = []
@@ -92,6 +93,15 @@ def get_active_resume(user: User = Depends(get_current_user), db: Session = Depe
     if not resume:
         raise HTTPException(status_code=404, detail="No active resume found")
     return resume
+
+
+@router.get("/{resume_id}/text")
+def get_resume_text(resume_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return the extracted text of a resume for modal preview."""
+    resume = db.query(Resume).filter(Resume.id == resume_id, Resume.user_id == user.id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return {"id": resume.id, "filename": resume.filename, "raw_text": resume.raw_text or ""}
 
 @router.patch("/{resume_id}/activate", response_model=ResumeResponse)
 def set_active_resume(resume_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.2.1
+
+### Features
+
+- Admin AI usage dashboard: token counts, estimated cost, and a usage
+  log per user with user/feature filters
+- AI usage tracking for every Gemini call (match analysis, cover letters,
+  skill extraction, job extraction from URL/pasted text)
+- Job description modal with "Go to Record" and "View original posting"
+  links, available from the jobs list, the job detail pane, and the edit
+  dialog
+- Resume viewer modal showing the extracted text of an uploaded resume
+
+### Changes
+
+- Tracker Kanban cards slimmed down: show only job title and company,
+  with the edit action kept and the delete button removed
+- Jobs page: a job opened via deep link (e.g. from the tracker) is pinned
+  to the top of the list; selecting a job scrolls the detail pane into view
+- Fixed version number display on login, register, verify-email, and
+  footer pages
+
+### Infrastructure
+
+- AI usage records are included in the full system backup and restore
+
 ## v1.2.0
 
 ### Features

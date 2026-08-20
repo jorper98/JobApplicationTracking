@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { type Job, type JobPreview } from "@/lib/types";
-import { X, Link2, FileText, Building2, Check, ClipboardType } from "lucide-react";
+import { X, Link2, FileText, Building2, Check, ClipboardType, Eye } from "lucide-react";
+import { JobDescriptionModal } from "@/components/JobDescriptionModal";
 
 interface JobModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
   const [preview, setPreview] = useState<JobPreview | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [showDesc, setShowDesc] = useState(false);
 
   const [companySuggestions, setCompanySuggestions] = useState<Company[]>([]);
   const [companySearching, setCompanySearching] = useState(false);
@@ -363,7 +365,20 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
                 <input type="date" value={form.createdAt} onChange={(e) => setForm({ ...form, createdAt: e.target.value })} className={inputClass} />
               </div>
               <div>
-                <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Job Description</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm text-gray-500 dark:text-[#8b8b96]">Job Description</label>
+                  {(form.description || "").trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDesc(true)}
+                      title="Preview job description"
+                      className="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-[#6b6b72] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Preview
+                    </button>
+                  )}
+                </div>
                 <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Paste the job description here..." rows={6} className={inputClass + " resize-none"} />
               </div>
 
@@ -424,8 +439,7 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
             </div>
           )}
 
-          {mode === "paste" && (
-            <div className="space-y-4">
+          {mode === "paste" && (            <div className="space-y-4">
               {!preview ? (
                 <div>
                   <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Job Description Text</label>
@@ -473,6 +487,16 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
           )}
         </div>
       </div>
+
+      <JobDescriptionModal
+        open={showDesc}
+        onClose={() => setShowDesc(false)}
+        jobId={job?.id}
+        title={form.title || "Job"}
+        company={form.company}
+        description={form.description}
+        url={form.url}
+      />
     </div>
   );
 }

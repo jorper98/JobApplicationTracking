@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.1.9",
+    version="1.2.1",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -169,6 +169,8 @@ def on_startup():
                 "CREATE INDEX IF NOT EXISTS ix_job_analyses_resume_id ON job_analyses (resume_id)",
                 "CREATE INDEX IF NOT EXISTS ix_applications_user_id ON applications (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_applications_job_id ON applications (job_id)",
+                "CREATE INDEX IF NOT EXISTS ix_ai_usage_user_id ON ai_usage (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_ai_usage_feature ON ai_usage (feature)",
                 # A job is tracked exactly once. Dedupe any legacy duplicates
                 # (keep the newest row) before enforcing the unique index.
                 "DELETE FROM applications a USING applications b "

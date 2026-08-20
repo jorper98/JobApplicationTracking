@@ -3,6 +3,8 @@ import ipaddress
 import random
 import socket
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import urlparse
 from app.core.config import settings
 import httpx
@@ -38,6 +40,101 @@ def _normalize_model_name(model_name: str) -> str:
     if model_name.startswith("models/") or model_name.startswith("tunedModels/"):
         return model_name
     return f"models/{model_name}"
+
+
+def _plain_model_name(model_name: str) -> str:
+    for prefix in ("models/", "tunedModels/"):
+        if model_name.startswith(prefix):
+            return model_name[len(prefix):]
+    return model_name
+
+
+# Estimated USD cost per 1M tokens (input, output). Used for the admin
+# usage dashboard; approximate, based on public Gemini pricing.
+_MODEL_PRICES: dict[str, tuple[float, float]] = {
+    "gemini-3.6-flash": (0.30, 2.50),
+    "gemini-3.5-flash": (0.30, 2.50),
+    "gemini-3.5-flash-lite": (0.15, 0.60),
+    "gemini-3.1-flash": (0.30, 2.50),
+    "gemini-3.1-flash-lite": (0.15, 0.60),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "gemini-2.5-flash-lite": (0.15, 0.60),
+    "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-2.0-flash": (0.10, 0.40),
+    "gemini-1.5-flash": (0.075, 0.30),
+    "gemini-1.5-pro": (1.25, 5.00),
+}
+_DEFAULT_PRICE = (1.25, 10.00)
+
+
+def estimate_cost(model_name: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Estimate the USD cost of a call using the model pricing table."""
+    input_per_m, output_per_m = _MODEL_PRICES.get(_plain_model_name(model_name), _DEFAULT_PRICE)
+    return round((prompt_tokens / 1_000_000 * input_per_m) + (completion_tokens / 1_000_000 * output_per_m), 6)
+
+
+# Per-request context set by the API routes so the AI service knows which
+# user/feature a generation belongs to (for the admin usage log).
+_usage_ctx: ContextVar[dict | None] = ContextVar("ai_usage_ctx", default=None)
+
+
+@contextmanager
+def track_usage(user_id: str, feature: str):
+    """Wrap an AI call to attribute its token usage to a user + feature."""
+    token = _usage_ctx.set({"user_id": user_id, "feature": feature})
+    try:
+        yield
+    finally:
+        _usage_ctx.reset(token)
+
+
+def _extract_usage_metadata(response) -> dict | None:
+    """Pull (prompt, completion) token counts out of a Gemini response, when
+    the provider reports them. Returns None when unavailable."""
+    try:
+        meta = getattr(response, "usage_metadata", None)
+        if meta is None:
+            inner = getattr(response, "_result", None)
+            if inner is not None:
+                meta = getattr(inner, "usage_metadata", None)
+        if meta is None:
+            return None
+        return {
+            "prompt_tokens": int(getattr(meta, "prompt_token_count", 0) or 0),
+            "completion_tokens": int(getattr(meta, "candidates_token_count", 0) or 0),
+        }
+    except Exception:
+        return None
+
+
+def _record_usage(model_name: str, prompt_tokens: int = 0, completion_tokens: int = 0,
+                  status: str = "success", error: str | None = None) -> None:
+    """Persist one AI usage row. Never raises: a logging failure must not
+    break the actual AI feature."""
+    ctx = _usage_ctx.get()
+    if not ctx:
+        return
+    try:
+        from app.db.database import SessionLocal
+        from app.models.models import AIUsage
+        db = SessionLocal()
+        try:
+            db.add(AIUsage(
+                user_id=ctx["user_id"],
+                feature=ctx["feature"],
+                model=_plain_model_name(model_name),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                cost=estimate_cost(model_name, prompt_tokens, completion_tokens),
+                status=status,
+                error=error,
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as exc:
+        print("Failed to record AI usage:", exc)
 
 
 _client_cache: dict = {"key": None, "client": None}
@@ -86,15 +183,28 @@ def generate_with_model(model_name: str, prompt: str) -> str:
     """Generate text with a single model; returns "" on failure."""
     active_client = _get_client()
     if active_client is None:
+        _record_usage(model_name, status="failed", error="No Gemini API key configured")
         return ""
     try:
         if USE_GENAI_CLIENT and active_client is not None:
             response = active_client.models.generate_content(model=_normalize_model_name(model_name), contents=prompt)
         else:
             response = genai.generate_text(model=_normalize_model_name(model_name), prompt=prompt)
-        return _get_response_text(response).strip()
+        text = _get_response_text(response).strip()
+        usage = _extract_usage_metadata(response)
+        prompt_tokens = usage["prompt_tokens"] if usage else 0
+        completion_tokens = usage["completion_tokens"] if usage else 0
+        _record_usage(
+            model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            status="success" if text else "failed",
+            error=None if text else "Model returned an empty response",
+        )
+        return text
     except Exception as exc:
         print(f"AI generation failed for {model_name}:", exc)
+        _record_usage(model_name, status="failed", error=str(exc)[:500])
         return ""
 
 

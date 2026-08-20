@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company
+from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company, AIUsage
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_admin
 from pathlib import Path
@@ -257,6 +257,7 @@ def system_backup(admin: User = Depends(get_current_admin), db: Session = Depend
         "applications": [serialize_model(a) for a in db.query(Application).filter(Application.user_id.in_(user_ids)).all()] if user_ids else [],
         "analyses": [serialize_model(a) for a in db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).all()] if job_ids else [],
         "notes": [serialize_model(n) for n in db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).all()] if job_ids else [],
+        "ai_usage": [serialize_model(r) for r in db.query(AIUsage).filter(AIUsage.user_id.in_(user_ids)).all()] if user_ids else [],
     }
 
     buffer = io.BytesIO()
@@ -337,6 +338,7 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
 
     # 2. Replace ALL data in a single transaction
     try:
+        db.query(AIUsage).delete()
         db.query(JobAnalysis).delete()
         db.query(JobNote).delete()
         db.query(Application).delete()
@@ -384,6 +386,8 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
             db.add(JobNote(**filter_columns(JobNote, sanitize_row(row))))
         for row in payload.get("applications", []):
             db.add(Application(**filter_columns(Application, sanitize_row(row))))
+        for row in payload.get("ai_usage", []):
+            db.add(AIUsage(**filter_columns(AIUsage, sanitize_row(row))))
 
         db.commit()
     except Exception as exc:

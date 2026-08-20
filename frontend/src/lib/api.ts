@@ -72,6 +72,11 @@ export const api = {
     const { data } = await client.post("/api/users/settings/smtp/test");
     return data;
   },
+  // Admin: AI usage log
+  getAIUsage: async (params?: { user_id?: string; feature?: string; limit?: number; offset?: number }) => {
+    const { data } = await client.get("/api/users/usage", { params });
+    return data;
+  },
   // Resume
   uploadResume: async (file: File) => {
     const form = new FormData();
@@ -87,6 +92,10 @@ export const api = {
   },
   getActiveResume: async () => {
     const { data } = await client.get("/api/resume/active");
+    return data;
+  },
+  getResumeText: async (id: string) => {
+    const { data } = await client.get(`/api/resume/${id}/text`);
     return data;
   },
   deleteResume: async (id: string) => {

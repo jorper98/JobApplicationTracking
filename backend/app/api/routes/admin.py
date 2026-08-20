@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_admin, hash_password
@@ -294,4 +295,70 @@ def test_smtp_settings(admin: User = Depends(get_current_admin), db: Session = D
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"SMTP test failed: {exc}")
     return {"message": f"Test email sent to {admin.email}"}
+
+
+@router.get("/usage")
+def get_ai_usage(
+    user_id: str | None = Query(None, description="Filter by user id"),
+    feature: str | None = Query(None, description="Filter by AI feature name"),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Return the AI usage log with per-user/feature filters (admin only)."""
+    from app.models.models import AIUsage
+
+    query = db.query(AIUsage)
+    if user_id:
+        query = query.filter(AIUsage.user_id == user_id)
+    if feature:
+        query = query.filter(AIUsage.feature == feature)
+
+    total_calls = query.count()
+    prompt_tokens, completion_tokens, total_tokens, cost = (
+        query.with_entities(
+            func.coalesce(func.sum(AIUsage.prompt_tokens), 0),
+            func.coalesce(func.sum(AIUsage.completion_tokens), 0),
+            func.coalesce(func.sum(AIUsage.total_tokens), 0),
+            func.coalesce(func.sum(AIUsage.cost), 0.0),
+        ).one()
+    )
+
+    records = query.order_by(AIUsage.created_at.desc()).offset(offset).limit(limit).all()
+    user_emails = {u.id: u.email for u in db.query(User).all()}
+    users = [
+        {"id": u.id, "email": u.email, "full_name": u.full_name}
+        for u in db.query(User).order_by(User.email.asc()).all()
+    ]
+    features = [row[0] for row in db.query(AIUsage.feature).distinct().order_by(AIUsage.feature).all()]
+
+    return {
+        "summary": {
+            "calls": total_calls,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "cost": round(cost, 6),
+        },
+        "users": users,
+        "features": features,
+        "records": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "user_email": user_emails.get(r.user_id, "unknown"),
+                "feature": r.feature,
+                "model": r.model,
+                "prompt_tokens": r.prompt_tokens,
+                "completion_tokens": r.completion_tokens,
+                "total_tokens": r.total_tokens,
+                "cost": r.cost,
+                "status": r.status,
+                "error": r.error,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in records
+        ],
+    }
 

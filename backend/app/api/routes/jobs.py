@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import Job, JobNote, ApplicationStatus, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
-from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text
+from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text, track_usage
 from app.api.routes.companies import get_or_create_company
 from app.api.routes.applications import get_or_create_application
 from app.core.auth import get_current_user
@@ -20,7 +20,7 @@ def _get_owned_job(db: Session, user: User, job_id: str) -> Job:
     return job
 
 
-def _extract_job_skills_in_background(job_id: str, description: str) -> None:
+def _extract_job_skills_in_background(user_id: str, job_id: str, description: str) -> None:
     """Run after the response is sent: AI-extract skills and update the job.
 
     The DB connection is only held for the quick lookups, never across the
@@ -36,7 +36,8 @@ def _extract_job_skills_in_background(job_id: str, description: str) -> None:
     if not exists:
         return
 
-    extracted = extract_skills_from_job(description)
+    with track_usage(user_id, "extract_job_skills"):
+        extracted = extract_skills_from_job(description)
 
     db = SessionLocal()
     try:
@@ -103,7 +104,7 @@ def create_job(
     db.refresh(job)
 
     if job_data.description:
-        background_tasks.add_task(_extract_job_skills_in_background, job.id, job_data.description)
+        background_tasks.add_task(_extract_job_skills_in_background, user.id, job.id, job_data.description)
 
     return job
 
@@ -227,7 +228,8 @@ def create_job_from_url(
 
     # 2. AI extracts structured job data
     try:
-        extracted = extract_job_from_text(page_text)
+        with track_usage(user.id, "extract_job"):
+            extracted = extract_job_from_text(page_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
 
@@ -269,7 +271,8 @@ def preview_job_from_url(
         raise HTTPException(status_code=422, detail=str(e))
 
     try:
-        extracted = extract_job_from_text(page_text)
+        with track_usage(user.id, "extract_job"):
+            extracted = extract_job_from_text(page_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
 
@@ -298,7 +301,8 @@ def create_job_from_text(
         raise HTTPException(status_code=400, detail="Text is required")
 
     try:
-        extracted = extract_job_from_text(str(text).strip())
+        with track_usage(user.id, "extract_job"):
+            extracted = extract_job_from_text(str(text).strip())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
 
@@ -334,7 +338,8 @@ def preview_job_from_text(
         raise HTTPException(status_code=400, detail="Text is required")
 
     try:
-        extracted = extract_job_from_text(str(text).strip())
+        with track_usage(user.id, "extract_job"):
+            extracted = extract_job_from_text(str(text).strip())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
 

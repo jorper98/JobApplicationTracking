@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { PageHeader, PageLoading, PageShell } from "@/components/PageShell";
-import { GripVertical, Trash2, Search, Pencil } from "lucide-react";
+import { GripVertical, Search, Pencil } from "lucide-react";
 
 const COLUMNS = [
   { key: "saved", label: "Saved", color: "#94a3b8" },
@@ -85,28 +85,6 @@ export default function TrackerPage() {
     }
   };
 
-  const handleDelete = async (id: string, status: string) => {
-    if (!confirm("Remove this application?")) return;
-    const prev = board;
-    setBoard((prevState) => ({
-      ...prevState,
-      [status]: prevState[status].filter((c) => c.id !== id),
-    }));
-    try {
-      await api.deleteApplication(id);
-    } catch (e) {
-      console.error("Failed to delete", e);
-      setBoard(prev);
-    }
-  };
-
-  const scoreColor = (score?: number) => {
-    if (!score) return "#8b8b96";
-    if (score >= 75) return "#4ade80";
-    if (score >= 50) return "#fbbf24";
-    return "#f87171";
-  };
-
   if (loading) {
     return <PageLoading message="Loading tracker…" />;
   }
@@ -175,19 +153,13 @@ export default function TrackerPage() {
                   key={card.id}
                   draggable
                   onDragStart={() => handleDragStart(card, key)}
-                  className="group bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-xl p-3.5 cursor-grab active:cursor-grabbing hover:border-white/[0.15] transition-colors"
+                  className="group bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] rounded-lg p-2.5 cursor-grab active:cursor-grabbing hover:border-white/[0.15] transition-colors"
                 >
-                  <div className="flex items-start gap-1.5">
-                    <GripVertical className="w-3.5 h-3.5 text-gray-400 dark:text-[#5a5a64] mt-0.5 shrink-0" />
+                  <div className="flex items-center gap-1.5">
+                    <GripVertical className="w-3.5 h-3.5 text-gray-400 dark:text-[#5a5a64] shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm text-gray-900 dark:text-white truncate">{card.title}</p>
                       <p className="text-xs text-gray-500 dark:text-[#8b8b96] truncate">{card.company}</p>
-                      {card.location && <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{card.location}</p>}
-                      {card.match_score && (
-                        <p className="text-xs font-semibold mt-1.5" style={{ color: scoreColor(card.match_score) }}>
-                          {card.match_score}% match
-                        </p>
-                      )}
                     </div>
                     <Link
                       href={`/jobs?job_id=${card.job_id}`}
@@ -196,16 +168,6 @@ export default function TrackerPage() {
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </Link>
-                  </div>
-                  <div className="flex items-center justify-end mt-2.5 pt-2.5 border-t border-gray-100 dark:border-white/[0.06]">
-                    <button
-                      onClick={() => handleDelete(card.id, key)}
-                      className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-[#5a5a64] hover:text-red-600 dark:hover:text-red-400 transition-colors p-0.5"
-                      title="Remove"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Remove
-                    </button>
                   </div>
                 </div>
               ))}

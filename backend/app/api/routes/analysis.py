@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import JobAnalysis, Job, Resume, User
 from app.schemas.schemas import AnalysisRequest, AnalysisResponse
-from app.services.ai_service import analyze_match, generate_cover_letter
+from app.services.ai_service import analyze_match, generate_cover_letter, track_usage
 from app.core.auth import get_current_user
 from app.core.rate_limit import ai_quota_limit
 
@@ -32,11 +32,12 @@ def analyze_job_match(
     if not job.description:
         raise HTTPException(status_code=400, detail="Job has no description")
 
-    result = analyze_match(
-        resume_text=resume.raw_text,
-        job_description=job.description,
-        job_skills=job.extracted_skills or [],
-    )
+    with track_usage(user.id, "analyze_match"):
+        result = analyze_match(
+            resume_text=resume.raw_text,
+            job_description=job.description,
+            job_skills=job.extracted_skills or [],
+        )
 
     # One analysis per (job, resume) pair: update in place if it already
     # exists, otherwise create a new record. The cover letter is kept on
@@ -81,12 +82,13 @@ def create_cover_letter(
     job = analysis.job
     resume = analysis.resume
 
-    cover_letter = generate_cover_letter(
-        resume_text=resume.raw_text,
-        job_title=job.title,
-        company=job.company,
-        job_description=job.description or "",
-    )
+    with track_usage(user.id, "cover_letter"):
+        cover_letter = generate_cover_letter(
+            resume_text=resume.raw_text,
+            job_title=job.title,
+            company=job.company,
+            job_description=job.description or "",
+        )
 
     analysis.cover_letter = cover_letter
     db.commit()
