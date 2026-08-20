@@ -165,12 +165,28 @@ export const api = {
     const { data } = await client.post("/api/companies/", payload);
     return data;
   },
-  updateCompany: async (id: string, payload: { name?: string; notes?: string }) => {
+  updateCompany: async (id: string, payload: { name?: string; notes?: string | null }) => {
     const { data } = await client.patch(`/api/companies/${id}`, payload);
     return data;
   },
   deleteCompany: async (id: string) => {
     const { data } = await client.delete(`/api/companies/${id}`);
+    return data;
+  },
+  listCompanyNotes: async (companyId: string) => {
+    const { data } = await client.get(`/api/companies/${companyId}/notes`);
+    return data;
+  },
+  createCompanyNote: async (companyId: string, note: string) => {
+    const { data } = await client.post(`/api/companies/${companyId}/notes`, { note });
+    return data;
+  },
+  updateCompanyNote: async (companyId: string, noteId: string, note: string) => {
+    const { data } = await client.patch(`/api/companies/${companyId}/notes/${noteId}`, { note });
+    return data;
+  },
+  deleteCompanyNote: async (companyId: string, noteId: string) => {
+    const { data } = await client.delete(`/api/companies/${companyId}/notes/${noteId}`);
     return data;
   },
 
@@ -217,6 +233,14 @@ export const api = {
   },
   previewJobFromUrl: async (url: string) => {
     const { data } = await client.post("/api/jobs/from-url/preview", { url });
+    return data;
+  },
+  previewJobFromText: async (text: string) => {
+    const { data } = await client.post("/api/jobs/from-text/preview", { text });
+    return data;
+  },
+  createJobFromText: async (text: string) => {
+    const { data } = await client.post("/api/jobs/from-text", { text });
     return data;
   },
 

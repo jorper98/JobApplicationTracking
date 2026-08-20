@@ -1,10 +1,18 @@
 import json
 import ipaddress
+import random
 import socket
+import time
 from urllib.parse import urlparse
 from app.core.config import settings
 import httpx
 from bs4 import BeautifulSoup
+
+try:
+    import trafilatura
+    _TRAFILATURA_AVAILABLE = True
+except ImportError:
+    _TRAFILATURA_AVAILABLE = False
 
 try:
     from google import genai
@@ -18,6 +26,12 @@ try:
     _PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     _PLAYWRIGHT_AVAILABLE = False
+
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+]
 
 # Normalize a model name to an API-compatible form.
 def _normalize_model_name(model_name: str) -> str:
@@ -233,6 +247,13 @@ def _validate_url_target(url: str) -> None:
 
 
 def _clean_page_text(raw_text: str) -> str:
+    if _TRAFILATURA_AVAILABLE:
+        try:
+            extracted = trafilatura.extract(raw_text, include_tables=True, include_links=False)
+            if extracted and len(extracted.strip()) >= 50:
+                return extracted.strip()
+        except Exception:
+            pass
     soup = BeautifulSoup(raw_text, "html.parser")
 
     for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
@@ -248,62 +269,87 @@ def _fetch_with_playwright(url: str) -> str:
     consent walls). Returns cleaned text, or "" when unavailable/failed."""
     if not _PLAYWRIGHT_AVAILABLE:
         return ""
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(args=["--no-sandbox"])
-            try:
-                page = browser.new_page()
-                page.goto(url, wait_until="domcontentloaded", timeout=15000)
-                page.wait_for_timeout(2000)
-                raw = page.inner_text("body")
-            finally:
-                browser.close()
-        return _clean_page_text(raw)[:8000]
-    except Exception as exc:
-        print("Playwright fetch failed:", exc)
-        return ""
-
-
+    for _attempt in range(2):
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(args=[
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                ])
+                try:
+                    ctx = browser.new_context(
+                        user_agent=random.choice(_USER_AGENTS),
+                        viewport={"width": 1366, "height": 768},
+                        locale="en-US",
+                    )
+                    page = ctx.new_page()
+                    try:
+                        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    except Exception:
+                        pass
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        page.wait_for_timeout(3000)
+                    for sel in ("#onetrust-accept-btn-handler", "button[id*=cookie] button", "[aria-label*=Accept]"):
+                        try:
+                            page.click(sel, timeout=1000)
+                        except Exception:
+                            pass
+                    raw = page.inner_text("body")
+                finally:
+                    browser.close()
+            cleaned = _clean_page_text(raw)
+            if len(cleaned) >= 100:
+                return cleaned[:16000]
+        except Exception as exc:
+            print("Playwright fetch failed:", exc)
+            time.sleep(1)
+    return ""
 def fetch_job_from_url(url: str) -> str:
     """Fetch a job posting URL and return cleaned readable text."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-    }
     current = url
-    try:
-        with httpx.Client(timeout=15, follow_redirects=False) as client:
-            for _ in range(6):
-                _validate_url_target(current)
-                resp = client.get(current, headers=headers)
-                if resp.status_code in (301, 302, 303, 307, 308):
-                    location = resp.headers.get("location")
-                    if not location:
-                        raise ValueError("Redirect response without a Location header")
-                    current = str(httpx.URL(current).join(location))
-                    continue
-                resp.raise_for_status()
-                break
-            else:
-                raise ValueError("Too many redirects")
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"Could not fetch the URL: {e}")
+    last_error = None
+    for attempt in range(3):
+        headers = {
+            "User-Agent": random.choice(_USER_AGENTS),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        try:
+            with httpx.Client(timeout=30, follow_redirects=False) as client:
+                for _ in range(6):
+                    _validate_url_target(current)
+                    resp = client.get(current, headers=headers)
+                    if resp.status_code in (301, 302, 303, 307, 308):
+                        location = resp.headers.get("location")
+                        if not location:
+                            raise ValueError("Redirect response without a Location header")
+                        current = str(httpx.URL(current).join(location))
+                        continue
+                    resp.raise_for_status()
+                    break
+                else:
+                    raise ValueError("Too many redirects")
+        except ValueError:
+            raise
+        except Exception as e:
+            last_error = e
+            time.sleep(1.5 * (attempt + 1))
+            continue
 
-    cleaned = _clean_page_text(resp.text)
+        cleaned = _clean_page_text(resp.text)
 
-    if len(cleaned) < 100:
-        rendered = _fetch_with_playwright(current)
-        if len(rendered) > len(cleaned):
-            cleaned = rendered
+        if len(cleaned) < 100:
+            rendered = _fetch_with_playwright(current)
+            if len(rendered) > len(cleaned):
+                cleaned = rendered
 
-    if len(cleaned) < 100:
-        raise ValueError("Page returned too little text — it may require login or block scraping.")
+        if len(cleaned) >= 100:
+            return cleaned[:16000]
+        last_error = ValueError("Page returned too little text - it may require login or block scraping.")
 
-    return cleaned[:8000]
-
-
+    raise ValueError(f"Could not fetch the URL: {last_error}")
 def extract_job_from_text(page_text: str) -> dict:
     """Use AI to pull structured job info from scraped page text."""
     prompt = f"""Below is the raw text of a job posting web page. Extract the job details.

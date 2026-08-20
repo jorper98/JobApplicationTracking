@@ -78,6 +78,18 @@ class Company(Base):
 
     user = relationship("User", back_populates="companies")
     jobs = relationship("Job", back_populates="company_record")
+    company_notes = relationship("CompanyNote", back_populates="company", cascade="all, delete-orphan")
+
+
+class CompanyNote(Base):
+    __tablename__ = "company_notes"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False, index=True)
+    note = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company", back_populates="company_notes")
 
 
 class Job(Base):

@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.2.0
+
+### Features
+
+- Job URL scraping now uses trafilatura for better content extraction,
+  automatically falling back to BeautifulSoup when needed
+- Hardened Playwright scraping: rotating user agents, stealth browser args,
+  networkidle wait, cookie-consent dismissal, and retries for JS-heavy sites
+- New "Paste Text" mode when adding a job: paste a job description directly
+  and let AI extract title, company, location, description, and skills
+- Backend endpoints for pasted-text jobs: `POST /api/jobs/from-text` and
+  `POST /api/jobs/from-text/preview`
+
+### Infrastructure
+
+- Added `trafilatura` to backend requirements
+
 ## v1.1.9
 
 ### Features

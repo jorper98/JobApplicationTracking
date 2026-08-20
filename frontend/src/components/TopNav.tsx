@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, FileText, LayoutDashboard, Target, PlusCircle, Database, Users, Settings } from "lucide-react";
+import { Briefcase, Building2, FileText, LayoutDashboard, Target, PlusCircle, Database, Users, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/resume", label: "Resume", icon: FileText },
+  { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/jobs", label: "Jobs", icon: Target },
   { href: "/tracker", label: "Tracker", icon: Briefcase },
   { href: "/data", label: "Data", icon: Database },

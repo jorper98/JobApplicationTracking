@@ -7,7 +7,7 @@ import Link from "next/link";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white dark:border-white/[0.08] dark:bg-[#0d0d14]">
@@ -21,11 +21,19 @@ export function Header() {
               JobApplicationTracker
             </span>
             <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">
-              v1.1.9
+              v1.2.0
             </span>
           </div>
         </Link>
         <div className="flex items-center gap-1">
+          {user && (
+            <span
+              className="text-sm text-gray-600 dark:text-[#c0c0c8] max-w-[180px] truncate hidden md:inline mr-1"
+              title={user.email}
+            >
+              {user.full_name || user.email}
+            </span>
+          )}
           <button
             onClick={logout}
             title="Sign out"

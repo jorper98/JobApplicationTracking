@@ -2,8 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Company, Job, User
-from app.schemas.schemas import CompanyCreate, CompanyUpdate, CompanyResponse
+from app.models.models import Company, CompanyNote, Job, User
+from app.schemas.schemas import (
+    CompanyCreate,
+    CompanyUpdate,
+    CompanyResponse,
+    CompanyNoteCreate,
+    CompanyNoteUpdate,
+    CompanyNoteResponse,
+)
 from app.core.auth import get_current_user
 from typing import List
 
@@ -126,3 +133,83 @@ def delete_company(company_id: str, user: User = Depends(get_current_user), db: 
     db.delete(company)
     db.commit()
     return {"message": "Company deleted"}
+
+
+@router.get("/{company_id}/notes", response_model=List[CompanyNoteResponse])
+def list_company_notes(
+    company_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all notes for a company."""
+    company = _get_owned_company(db, user, company_id)
+    return (
+        db.query(CompanyNote)
+        .filter(CompanyNote.company_id == company.id)
+        .order_by(CompanyNote.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/{company_id}/notes", response_model=CompanyNoteResponse)
+def create_company_note(
+    company_id: str,
+    note_data: CompanyNoteCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new note for a company."""
+    company = _get_owned_company(db, user, company_id)
+    if not note_data.note.strip():
+        raise HTTPException(status_code=400, detail="Note cannot be empty")
+    note = CompanyNote(company_id=company.id, note=note_data.note.strip())
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@router.patch("/{company_id}/notes/{note_id}", response_model=CompanyNoteResponse)
+def update_company_note(
+    company_id: str,
+    note_id: str,
+    note_data: CompanyNoteUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a company note."""
+    company = _get_owned_company(db, user, company_id)
+    note = (
+        db.query(CompanyNote)
+        .filter(CompanyNote.id == note_id, CompanyNote.company_id == company.id)
+        .first()
+    )
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note.note = note_data.note.strip()
+    if note_data.created_at:
+        note.created_at = note_data.created_at
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@router.delete("/{company_id}/notes/{note_id}")
+def delete_company_note(
+    company_id: str,
+    note_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a company note."""
+    company = _get_owned_company(db, user, company_id)
+    note = (
+        db.query(CompanyNote)
+        .filter(CompanyNote.id == note_id, CompanyNote.company_id == company.id)
+        .first()
+    )
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    db.delete(note)
+    db.commit()
+    return {"message": "Note deleted"}

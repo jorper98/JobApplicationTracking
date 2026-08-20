@@ -101,6 +101,25 @@ class JobNoteResponse(BaseModel):
         from_attributes = True
 
 
+class CompanyNoteCreate(BaseModel):
+    note: str
+
+
+class CompanyNoteUpdate(BaseModel):
+    note: str = Field(min_length=1)
+    created_at: Optional[datetime] = None
+
+
+class CompanyNoteResponse(BaseModel):
+    id: str
+    company_id: str
+    note: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Analysis ──────────────────────────────────────────────────────────────────
 
 class AnalysisRequest(BaseModel):

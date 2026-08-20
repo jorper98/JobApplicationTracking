@@ -235,6 +235,38 @@ def on_startup():
             db.close()
     except Exception as exc:
         print("Company backfill setup failed:", exc)
+    # Migrate the legacy single Company.notes text field into per-note
+    # CompanyNote records (runs once; new notes are added via the API).
+    try:
+        inspector = inspect(engine)
+        if "companies" in inspector.get_table_names() and "company_notes" in inspector.get_table_names():
+            company_columns = {col["name"] for col in inspector.get_columns("companies")}
+            if "notes" in company_columns:
+                from app.db.database import SessionLocal
+                from app.models.models import Company, CompanyNote
+                db = SessionLocal()
+                try:
+                    rows = db.execute(text(
+                        "SELECT id, notes FROM companies "
+                        "WHERE notes IS NOT NULL AND TRIM(notes) <> ''"
+                    )).fetchall()
+                    migrated = 0
+                    for company_id, notes_text in rows:
+                        exists = db.query(CompanyNote.id).filter(CompanyNote.company_id == company_id).first()
+                        if exists:
+                            continue
+                        db.add(CompanyNote(company_id=company_id, note=notes_text))
+                        migrated += 1
+                    if migrated:
+                        db.commit()
+                        print(f"Company notes migration complete: {migrated} note(s) migrated")
+                except Exception as exc:
+                    db.rollback()
+                    print("Company notes migration failed:", exc)
+                finally:
+                    db.close()
+    except Exception as exc:
+        print("Company notes migration setup failed:", exc)
 
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])

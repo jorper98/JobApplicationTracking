@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { PageHeader, PageShell } from "@/components/PageShell";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   saved: { label: "Saved", color: "#94a3b8" },
@@ -120,18 +120,16 @@ export default function DashboardPage() {
             <h2 className="text-gray-900 dark:text-white font-semibold text-sm mb-4">Status Breakdown</h2>
             <div className="flex items-center gap-4">
               <div style={{ width: 140, height: 140 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={2}>
-                      {pieData.map((d, i) => (
-                        <Cell key={i} fill={d.color} stroke="none" />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ background: "#0d0d14", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#fff", fontSize: 12 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <PieChart width={140} height={140}>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={2}>
+                    {pieData.map((d, i) => (
+                      <Cell key={i} fill={d.color} stroke="none" />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ background: "#0d0d14", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#fff", fontSize: 12 }}
+                  />
+                </PieChart>
               </div>
               <div className="flex-1 space-y-2">
                 {pieData.map((d) => (

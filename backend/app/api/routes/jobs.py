@@ -284,3 +284,66 @@ def preview_job_from_url(
         "extracted_data": extracted,
     }
     return result
+
+@router.post("/from-text", response_model=JobResponse)
+def create_job_from_text(
+    payload: dict,
+    _quota: None = Depends(ai_quota_limit),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Extract job details from pasted text with AI, and save it."""
+    text = payload.get("text")
+    if not text or not str(text).strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    try:
+        extracted = extract_job_from_text(str(text).strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
+
+    extracted_company = extracted.get("company") or "Unknown"
+    job = Job(
+        user_id=user.id,
+        title=extracted.get("title") or "Untitled Role",
+        company=extracted_company,
+        company_id=_resolve_company_id(db, user, None, extracted_company),
+        description=extracted.get("description"),
+        location=extracted.get("location"),
+        url=payload.get("url"),
+        extracted_skills=extracted.get("skills", []),
+        extracted_data=extracted,
+    )
+    db.add(job)
+    db.flush()
+    get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@router.post("/from-text/preview")
+def preview_job_from_text(
+    payload: dict,
+    _quota: None = Depends(ai_quota_limit),
+    user: User = Depends(get_current_user),
+):
+    """Extract job details from pasted text without saving."""
+    text = payload.get("text")
+    if not text or not str(text).strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    try:
+        extracted = extract_job_from_text(str(text).strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
+
+    return {
+        "title": extracted.get("title") or "Untitled Role",
+        "company": extracted.get("company") or "Unknown",
+        "description": extracted.get("description"),
+        "location": extracted.get("location"),
+        "skills": extracted.get("skills", []),
+        "extracted_data": extracted,
+    }
+

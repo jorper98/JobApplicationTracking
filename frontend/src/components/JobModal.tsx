@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { type Job, type JobPreview } from "@/lib/types";
-import { X, Link2, FileText, Building2, Check } from "lucide-react";
+import { X, Link2, FileText, Building2, Check, ClipboardType } from "lucide-react";
 
 interface JobModalProps {
   isOpen: boolean;
   onClose: () => void;
   job?: Job;
   onSave: (job: Job) => void;
+  initialCompany?: string;
 }
 
 interface Company {
@@ -19,9 +20,9 @@ interface Company {
   job_count?: number;
 }
 
-type ModalMode = "manual" | "url";
+type ModalMode = "manual" | "url" | "paste";
 
-export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
+export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobModalProps) {
   const [mode, setMode] = useState<ModalMode>("manual");
   const [form, setForm] = useState<{ title: string; company: string; description: string; url: string; location: string; createdAt: string }>({
     title: "",
@@ -32,8 +33,11 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
     createdAt: "",
   });
   const [urlInput, setUrlInput] = useState("");
+  const [pasteInput, setPasteInput] = useState("");
   const [scraping, setScraping] = useState(false);
+  const [pastePreviewing, setPastePreviewing] = useState(false);
   const [scrapeError, setScrapeError] = useState("");
+  const [pasteError, setPasteError] = useState("");
   const [preview, setPreview] = useState<JobPreview | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -71,14 +75,16 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
         }
         setMode("manual");
       } else {
-        setForm({ title: "", company: "", description: "", url: "", location: "", createdAt: "" });
+        setForm({ title: "", company: initialCompany || "", description: "", url: "", location: "", createdAt: "" });
         setUrlInput("");
+        setPasteInput("");
         setPreview(null);
         setScrapeError("");
+        setPasteError("");
         setError("");
       }
     }
-  }, [isOpen, job]);
+  }, [isOpen, job, initialCompany]);
 
   const handleCompanyChange = (value: string) => {
     setForm({ ...form, company: value });
@@ -149,6 +155,20 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
       setScrapeError(e?.response?.data?.detail || "Couldn't scrape that URL");
     } finally {
       setScraping(false);
+    }
+  };
+
+  const handlePastePreview = async () => {
+    if (!pasteInput.trim()) return;
+    setPastePreviewing(true);
+    setPasteError("");
+    try {
+      const extracted = await api.previewJobFromText(pasteInput.trim());
+      setPreview(extracted);
+    } catch (e: any) {
+      setPasteError(e?.response?.data?.detail || "Couldn't extract details from that text");
+    } finally {
+      setPastePreviewing(false);
     }
   };
 
@@ -245,6 +265,17 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
               >
                 <Link2 className="w-4 h-4" />
                 Import from URL
+              </button>
+              <button
+                onClick={() => setMode("paste")}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  mode === "paste"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-100 dark:bg-white/[0.06] text-gray-700 dark:text-[#c0c0c8] hover:bg-gray-200 dark:hover:bg-white/[0.1]"
+                }`}
+              >
+                <ClipboardType className="w-4 h-4" />
+                Paste Text
               </button>
             </div>
           )}
@@ -386,6 +417,54 @@ export function JobModal({ isOpen, onClose, job, onSave }: JobModalProps) {
                     </button>
                     <button onClick={() => setPreview(null)} className="px-4 py-2.5 rounded-lg text-sm text-gray-700 dark:text-[#c0c0c8] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
                       Try Different URL
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {mode === "paste" && (
+            <div className="space-y-4">
+              {!preview ? (
+                <div>
+                  <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Job Description Text</label>
+                  <textarea
+                    value={pasteInput}
+                    onChange={(e) => setPasteInput(e.target.value)}
+                    placeholder="Paste the full job posting text here..."
+                    rows={10}
+                    className={inputClass + " resize-none"}
+                  />
+                  {pasteError && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{pasteError}</p>}
+                  <button
+                    onClick={handlePastePreview}
+                    disabled={pastePreviewing || !pasteInput.trim()}
+                    className="mt-3 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {pastePreviewing ? "Extracting..." : "Preview"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.08] rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">{preview.title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-[#8b8b96] mb-3">
+                      {preview.company} {preview.location ? " | " + preview.location : ""}
+                    </p>
+                    <div className="max-h-48 overflow-y-auto bg-white dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 text-sm text-gray-700 dark:text-[#c0c0c8]">
+                      {preview.description || <em className="text-gray-400 dark:text-[#5a5a64]">No description extracted</em>}
+                    </div>
+                  </div>
+
+                  {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+                  <div className="flex gap-3">
+                    <button onClick={handleUsePreview} disabled={submitting} className="flex-1 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                      {submitting ? "Saving..." : "Save Job"}
+                    </button>
+                    <button onClick={() => setPreview(null)} className="px-4 py-2.5 rounded-lg text-sm text-gray-700 dark:text-[#c0c0c8] border border-gray-200 dark:border-white/[0.08] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors">
+                      Back
                     </button>
                   </div>
                 </>
