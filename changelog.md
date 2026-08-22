@@ -1,5 +1,41 @@
 # Changelog
 
+## v1.2.2
+
+### Features
+
+- Contacts are now mutually linked: adding a contact-to-contact relationship
+  stores both directions, so each side shows the other in its Relationships tab;
+  deleting a contact cleans up the reverse links
+- Companies page: new Relationships tab (single mixed list with type-colored
+  icons: contacts, jobs, notes) with deep links into each record
+- Jobs page: new Relationships tab (single mixed list with type-colored icons:
+  contacts, notes) with deep links into each record
+- All note displays now use a shared note card: text clamped to 4 lines, a
+  "More" button opens the full note in a wide scrollable modal, and the last
+  line shows the note date plus any tags; relationships tabs include the note
+  tags so tagged notes show them on the target record too
+- Deep linking: `/contacts?contact_id=...` and `/companies?company_id=...` focus
+  the record on page load, so cross-page links land on the right item
+- New Contacts page: keep people (recruiters, hiring managers, references) with
+  name, email, phone; each contact can link to many companies, jobs and other
+  contacts; detail panel has two tabs: Notes (with multi-entity tags per note
+  linking to jobs / companies / other contacts) and Relationships (single mixed
+  list grouped by name, with clickable links to each job/company), editable in
+  place
+- Contacts, relationships and note tags are included in data export/import,
+  admin system backup/restore, and Clear All Data; a one-off startup migration
+  moves legacy single-link rows (contacts.company_id / contacts.job_id) into
+  the new many-to-many tables
+- Sample data rebuilt: the importable `sample_data/job-tracker-sample.zip` now
+  includes 7 contacts with company/job/contact relationships and tagged notes
+- Login page right panel is now customizable: admins can paste HTML in the
+  Settings page that renders on the login page for everyone (stored server-side)
+
+### Version bump
+
+- Version bumped to 1.2.2
+
 ## v1.2.1
 
 ### Features

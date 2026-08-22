@@ -72,6 +72,20 @@ export const api = {
     const { data } = await client.post("/api/users/settings/smtp/test");
     return data;
   },
+  // Admin: login page branding
+  getLoginPageSettings: async () => {
+    const { data } = await client.get("/api/users/settings/login-page");
+    return data;
+  },
+  updateLoginPageSettings: async (loginPageHtml: string) => {
+    const { data } = await client.put("/api/users/settings/login-page", { login_page_html: loginPageHtml });
+    return data;
+  },
+  // Public: login page branding (no auth)
+  getLoginPageHtml: async () => {
+    const { data } = await client.get("/api/auth/login-page");
+    return data;
+  },
   // Admin: AI usage log
   getAIUsage: async (params?: { user_id?: string; feature?: string; limit?: number; offset?: number }) => {
     const { data } = await client.get("/api/users/usage", { params });
@@ -154,6 +168,14 @@ export const api = {
     const { data } = await client.delete(`/api/jobs/${jobId}/notes/${noteId}`);
     return data;
   },
+  listJobContacts: async (jobId: string) => {
+    const { data } = await client.get(`/api/jobs/${jobId}/contacts`);
+    return data;
+  },
+  getJobRelationships: async (jobId: string) => {
+    const { data } = await client.get(`/api/jobs/${jobId}/relationships`);
+    return data;
+  },
   listJobs: async () => {
     const { data } = await client.get("/api/jobs/");
     return data;
@@ -196,6 +218,86 @@ export const api = {
   },
   deleteCompanyNote: async (companyId: string, noteId: string) => {
     const { data } = await client.delete(`/api/companies/${companyId}/notes/${noteId}`);
+    return data;
+  },
+  listCompanyContacts: async (companyId: string) => {
+    const { data } = await client.get(`/api/companies/${companyId}/contacts`);
+    return data;
+  },
+  getCompanyRelationships: async (companyId: string) => {
+    const { data } = await client.get(`/api/companies/${companyId}/relationships`);
+    return data;
+  },
+
+  // Contacts
+  listContacts: async (params?: { search?: string }) => {
+    const { data } = await client.get("/api/contacts/", { params });
+    return data;
+  },
+  getContact: async (id: string) => {
+    const { data } = await client.get(`/api/contacts/${id}`);
+    return data;
+  },
+  createContact: async (payload: { name: string; email?: string; phone?: string }) => {
+    const { data } = await client.post("/api/contacts/", payload);
+    return data;
+  },
+  updateContact: async (
+    id: string,
+    payload: { name?: string; email?: string | null; phone?: string | null }
+  ) => {
+    const { data } = await client.patch(`/api/contacts/${id}`, payload);
+    return data;
+  },
+  deleteContact: async (id: string) => {
+    const { data } = await client.delete(`/api/contacts/${id}`);
+    return data;
+  },
+  getContactRelationships: async (contactId: string) => {
+    const { data } = await client.get(`/api/contacts/${contactId}/relationships`);
+    return data;
+  },
+  addContactRelationship: async (contactId: string, entityType: string, entityId: string) => {
+    const { data } = await client.post(`/api/contacts/${contactId}/relationships`, {
+      entity_type: entityType,
+      entity_id: entityId,
+    });
+    return data;
+  },
+  removeContactRelationship: async (contactId: string, entityType: string, entityId: string) => {
+    const { data } = await client.delete(`/api/contacts/${contactId}/relationships/${entityType}/${entityId}`);
+    return data;
+  },
+  listContactNotes: async (contactId: string) => {
+    const { data } = await client.get(`/api/contacts/${contactId}/notes`);
+    return data;
+  },
+  createContactNote: async (
+    contactId: string,
+    note: string,
+    tags?: { entity_type: string; entity_id: string }[]
+  ) => {
+    const { data } = await client.post(`/api/contacts/${contactId}/notes`, {
+      note,
+      ...(tags ? { tags } : {}),
+    });
+    return data;
+  },
+  updateContactNote: async (
+    contactId: string,
+    noteId: string,
+    note: string,
+    opts?: { tags?: { entity_type: string; entity_id: string }[]; createdAt?: string }
+  ) => {
+    const { data } = await client.patch(`/api/contacts/${contactId}/notes/${noteId}`, {
+      note,
+      ...(opts?.tags !== undefined ? { tags: opts.tags } : {}),
+      ...(opts?.createdAt ? { created_at: opts.createdAt } : {}),
+    });
+    return data;
+  },
+  deleteContactNote: async (contactId: string, noteId: string) => {
+    const { data } = await client.delete(`/api/contacts/${contactId}/notes/${noteId}`);
     return data;
   },
 

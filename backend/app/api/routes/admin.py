@@ -297,6 +297,32 @@ def test_smtp_settings(admin: User = Depends(get_current_admin), db: Session = D
     return {"message": f"Test email sent to {admin.email}"}
 
 
+class LoginPageSettingsResponse(BaseModel):
+    login_page_html: str
+
+
+class LoginPageSettingsUpdate(BaseModel):
+    login_page_html: str = ""
+
+
+@router.get("/settings/login-page", response_model=LoginPageSettingsResponse)
+def get_login_page_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Return the custom HTML for the login page right panel (admin only)."""
+    return {"login_page_html": _get_setting(db, "login_page_html") or ""}
+
+
+@router.put("/settings/login-page", response_model=LoginPageSettingsResponse)
+def update_login_page_settings(
+    data: LoginPageSettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Persist the custom HTML for the login page right panel (admin only)."""
+    _set_setting(db, "login_page_html", data.login_page_html)
+    db.commit()
+    return {"login_page_html": data.login_page_html}
+
+
 @router.get("/usage")
 def get_ai_usage(
     user_id: str | None = Query(None, description="Filter by user id"),

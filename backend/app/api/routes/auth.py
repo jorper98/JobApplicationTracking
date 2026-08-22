@@ -21,7 +21,7 @@ from app.core.rate_limit import (
     resend_rate_limit,
 )
 from app.db.database import get_db
-from app.models.models import User
+from app.models.models import AppSetting, User
 from app.services.email_service import send_verification_email, smtp_configured
 
 router = APIRouter()
@@ -182,5 +182,13 @@ def logout():
 def me(user: User = Depends(get_current_user)):
     """Return the current authenticated user."""
     return _user_payload(user)
+
+
+@router.get("/login-page")
+def login_page(db: Session = Depends(get_db)):
+    """Return the admin-configured custom HTML for the login page right
+    panel (public, no auth required)."""
+    row = db.get(AppSetting, "login_page_html")
+    return {"login_page_html": row.value if row else ""}
 
 

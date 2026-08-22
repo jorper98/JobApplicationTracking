@@ -58,12 +58,12 @@ export default function DataPage() {
   };
 
   const handleClearAll = async () => {
-    if (!confirm("This will permanently delete ALL jobs, resumes, applications, analyses, and uploaded files. This cannot be undone. Continue?")) return;
+    if (!confirm("This will permanently delete ALL of YOUR data (jobs, resumes, applications, analyses, contacts, companies, notes, and uploaded files). Other users' data is not affected. This cannot be undone. Continue?")) return;
     setClearing(true);
     setMessage(null);
     try {
       await api.clearAllData();
-      setMessage("All data cleared.");
+      setMessage("All of your data cleared.");
     } catch (error) {
       console.error(error);
       setMessage("Clear failed. Check the backend logs.");
@@ -204,7 +204,7 @@ export default function DataPage() {
           </div>
           <div>
             <h2 className="text-gray-900 dark:text-white text-lg font-semibold">Clear All Data</h2>
-            <p className="text-sm text-gray-500 dark:text-[#8b8b96] mt-1">Permanently delete all jobs, resumes, applications, analyses, and uploaded files. This cannot be undone.</p>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] mt-1">Permanently delete all of your data — jobs, resumes, applications, analyses, contacts, companies, notes, and uploaded files. This only affects your account and cannot be undone.</p>
           </div>
         </div>
         <button

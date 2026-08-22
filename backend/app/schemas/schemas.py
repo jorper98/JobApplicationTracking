@@ -120,6 +120,73 @@ class CompanyNoteResponse(BaseModel):
         from_attributes = True
 
 
+# ── Contact ───────────────────────────────────────────────────────────────
+
+class ContactCreate(BaseModel):
+    name: str = Field(min_length=1)
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class ContactUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class ContactLinkResponse(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+
+
+class ContactResponse(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    companies: List[ContactLinkResponse] = []
+    jobs: List[ContactLinkResponse] = []
+    contacts: List[ContactLinkResponse] = []
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ContactNoteTagResponse(BaseModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    entity_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ContactNoteCreate(BaseModel):
+    note: str
+    tags: Optional[List[dict]] = None  # [{entity_type, entity_id}]
+
+
+class ContactNoteUpdate(BaseModel):
+    note: str = Field(min_length=1)
+    created_at: Optional[datetime] = None
+    tags: Optional[List[dict]] = None
+
+
+class ContactNoteResponse(BaseModel):
+    id: str
+    contact_id: str
+    note: str
+    created_at: datetime
+    tags: List[ContactNoteTagResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
 # ── Analysis ──────────────────────────────────────────────────────────────────
 
 class AnalysisRequest(BaseModel):

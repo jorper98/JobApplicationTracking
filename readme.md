@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.1-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.2.2-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -19,11 +19,13 @@ JobApplicationTracker is open source and ready for you to use. It is also provid
 - **Kanban Board** — Drag-and-drop application status tracking (Saved → Applied → Interview → Offer)
 - **AI Match Analysis** — Score resume-to-job matches, identify matching and missing skills
 - **Cover Letter Generation** — Generate personalized cover letters tailored to each job
+- **Companies** — Manage companies with notes, linked jobs, and a Relationships tab
+- **Contacts** — Keep recruiters, hiring managers, and references with name, email, phone; link each contact to many companies, jobs, and other contacts; two-tab detail panel (Notes with multi-entity tags, Relationships with clickable links)
 - **Dashboard** — Application statistics, status breakdown charts, and recent activity
 - **Search & Filter** — Full-text search across jobs, notes, and skills with status/tag filters
-- **Data Export/Import** — Backup and restore your data as a zip bundle
+- **Data Export/Import** — Backup and restore your data (including contacts, relationships, and note tags) as a zip bundle
 - **User Management** — Multi-user support with admin controls (JWT authentication)
-- **Admin Settings** — Manage the AI model and Gemini API key from an admin-only Settings page
+- **Admin Settings** — Manage the AI model, Gemini API key, SMTP, and login-page branding from an admin-only Settings page
 - **Dark Mode** — Light/dark theme toggle with system preference detection
 
 ## Tech Stack
@@ -88,6 +90,7 @@ The application will be available at:
 2. Add jobs under **Jobs** (manually or import from URL)
 3. Run AI analysis to get match scores
 4. Track applications on the **Tracker** board
+5. Log companies and people (recruiters, hiring managers, references) under **Companies** and **Contacts**
 
 ## Production Deployment
 
@@ -98,7 +101,7 @@ admin system backup/restore), follow the
 
 ## Sample Data
 
-A ready-to-import sample dataset lives in [`sample_data/`](sample_data/): **10 jobs** across every tracker status, **3 resume versions** with extracted skills and PDFs, **12 AI match analyses** (several with cover letters), and **14 notes**.
+A ready-to-import sample dataset lives in [`sample_data/`](sample_data/): **10 jobs** across every tracker status, **3 resume versions** with extracted skills and PDFs, **12 AI match analyses** (several with cover letters), **14 job notes**, and **7 contacts** with company/job/contact relationships and tagged notes.
 
 To import: log in, open **Data → Import Backup**, choose `sample_data/job-tracker-sample.zip`.
 
@@ -108,7 +111,7 @@ Rebuild the zip after editing `data.json` (Python 3.10+): `python sample_data/bu
 
 ## API Documentation
 
-Interactive API docs: http://localhost:8136/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), jobs (`/api/jobs/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
+Interactive API docs: http://localhost:8136/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), jobs (`/api/jobs/*`), companies (`/api/companies/*`), contacts (`/api/contacts/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
 
 ## Development
 
@@ -190,5 +193,5 @@ has been refactored for better readability and maintainability.
 
 ---
 
-**Version:** 1.2.1  
-**Last Updated:** 2026-08-16
+**Version:** 1.2.2  
+**Last Updated:** 2026-08-21

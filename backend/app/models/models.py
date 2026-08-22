@@ -47,6 +47,7 @@ class User(Base):
     applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
     jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan")
     companies = relationship("Company", back_populates="user", cascade="all, delete-orphan")
+    contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
     ai_usage = relationship("AIUsage", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -91,6 +92,77 @@ class CompanyNote(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     company = relationship("Company", back_populates="company_notes")
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="contacts")
+    contact_companies = relationship("ContactCompany", back_populates="contact", cascade="all, delete-orphan")
+    contact_jobs = relationship("ContactJob", back_populates="contact", cascade="all, delete-orphan")
+    related_contacts = relationship("ContactContact", foreign_keys="ContactContact.contact_id", back_populates="contact", cascade="all, delete-orphan")
+    contact_notes = relationship("ContactNote", back_populates="contact", cascade="all, delete-orphan")
+
+
+class ContactCompany(Base):
+    __tablename__ = "contact_companies"
+
+    contact_id = Column(String, ForeignKey("contacts.id"), primary_key=True)
+    company_id = Column(String, ForeignKey("companies.id"), primary_key=True)
+
+    contact = relationship("Contact", back_populates="contact_companies")
+    company = relationship("Company")
+
+
+class ContactJob(Base):
+    __tablename__ = "contact_jobs"
+
+    contact_id = Column(String, ForeignKey("contacts.id"), primary_key=True)
+    job_id = Column(String, ForeignKey("jobs.id"), primary_key=True)
+
+    contact = relationship("Contact", back_populates="contact_jobs")
+    job = relationship("Job")
+
+
+class ContactContact(Base):
+    __tablename__ = "contact_contacts"
+
+    contact_id = Column(String, ForeignKey("contacts.id"), primary_key=True)
+    related_contact_id = Column(String, ForeignKey("contacts.id"), primary_key=True)
+
+    contact = relationship("Contact", foreign_keys=[contact_id], back_populates="related_contacts")
+    related_contact = relationship("Contact", foreign_keys=[related_contact_id])
+
+
+class ContactNote(Base):
+    __tablename__ = "contact_notes"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    contact_id = Column(String, ForeignKey("contacts.id"), nullable=False, index=True)
+    note = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    contact = relationship("Contact", back_populates="contact_notes")
+    tags = relationship("ContactNoteTag", back_populates="note", cascade="all, delete-orphan")
+
+
+class ContactNoteTag(Base):
+    __tablename__ = "contact_note_tags"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    note_id = Column(String, ForeignKey("contact_notes.id"), nullable=False, index=True)
+    entity_type = Column(String, nullable=False)  # 'job', 'company', 'contact'
+    entity_id = Column(String, nullable=False)
+
+    note = relationship("ContactNote", back_populates="tags")
 
 
 class Job(Base):

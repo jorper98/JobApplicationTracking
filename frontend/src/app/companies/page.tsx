@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageLoading, PageShell } from "@/components/PageShell";
 import { JobModal } from "@/components/JobModal";
-import { Building2, Plus, Pencil, Trash2, Search, X, Briefcase, StickyNote, Send, Calendar } from "lucide-react";
+import { NoteCard, type NoteTag } from "@/components/NoteCard";
+import { Building2, Plus, Pencil, Trash2, Search, X, Briefcase, StickyNote, Send, Contact as ContactIcon } from "lucide-react";
 
 interface Company {
   id: string;
@@ -30,7 +32,7 @@ interface CompanyNote {
   created_at?: string;
 }
 
-type Tab = "notes" | "jobs";
+type Tab = "notes" | "jobs" | "relationships";
 
 const STATUS_LABEL: Record<string, string> = {
   saved: "Saved",
@@ -54,7 +56,9 @@ const STATUS_BADGE: Record<string, string> = {
 
 const emptyForm = { name: "", notes: "" };
 
-export default function CompaniesPage() {
+function CompaniesContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [allJobs, setAllJobs] = useState<JobRow[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
@@ -76,6 +80,14 @@ export default function CompaniesPage() {
   const [editingNote, setEditingNote] = useState<CompanyNote | null>(null);
   const [editNoteText, setEditNoteText] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
+
+  // Contacts linked to this company
+  const [companyRelationships, setCompanyRelationships] = useState<{
+    contacts: { id: string; name: string; email?: string | null; phone?: string | null }[];
+    jobs: { id: string; title: string; company: string }[];
+    notes: { id: string; note: string; created_at?: string | null; source: string; contact_id?: string | null; contact_name?: string | null; tags?: NoteTag[] }[];
+  }>({ contacts: [], jobs: [], notes: [] });
+  const [noteModal, setNoteModal] = useState<{ title: string; text: string } | null>(null);
 
   // Job modal
   const [jobModalOpen, setJobModalOpen] = useState(false);
@@ -110,11 +122,23 @@ export default function CompaniesPage() {
       .listCompanyNotes(companyId)
       .then((data) => setNotes(data || []))
       .catch(console.error);
+    api
+      .getCompanyRelationships(companyId)
+      .then((data) => setCompanyRelationships(data || { contacts: [], jobs: [], notes: [] }))
+      .catch(console.error);
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  // Deep-link: focus a company from ?company_id=
+  useEffect(() => {
+    const companyId = searchParams.get("company_id");
+    if (!companyId || companies.length === 0) return;
+    const target = companies.find((c) => c.id === companyId);
+    if (target) setSelected(target);
+  }, [searchParams, companies]);
 
   // Load notes when a company is selected
   useEffect(() => {
@@ -138,6 +162,58 @@ export default function CompaniesPage() {
     () => (selected ? allJobs.filter((j) => j.company_id === selected.id) : []),
     [selected, allJobs]
   );
+
+  const companyRelItems = useMemo(() => {
+    const items: {
+      key: string;
+      type: "contact" | "job" | "note";
+      href?: string;
+      name: string;
+      sub: string;
+      status?: string;
+      note?: string;
+      created_at?: string | null;
+      source?: string;
+      contact_id?: string | null;
+      contact_name?: string | null;
+      tags?: NoteTag[];
+    }[] = [];
+    companyRelationships.contacts.forEach((c) =>
+      items.push({
+        key: `contact-${c.id}`,
+        type: "contact",
+        href: `/contacts?contact_id=${c.id}`,
+        name: c.name,
+        sub: [c.email, c.phone].filter(Boolean).join(" · ") || "Contact",
+      })
+    );
+    companyRelationships.jobs.forEach((j) =>
+      items.push({
+        key: `job-${j.id}`,
+        type: "job",
+        href: `/jobs?job_id=${j.id}`,
+        name: j.title,
+        sub: j.company,
+        status: statusMap[j.id] || "saved",
+      })
+    );
+    companyRelationships.notes.forEach((n) =>
+      items.push({
+        key: `note-${n.source}-${n.id}`,
+        type: "note",
+        name: n.note.split("\n")[0].trim().slice(0, 80) || "Note",
+        sub: n.source === "contact" ? `via ${n.contact_name || "contact"}` : "Company note",
+        note: n.note,
+        created_at: n.created_at,
+        source: n.source,
+        contact_id: n.contact_id,
+        contact_name: n.contact_name,
+        tags: n.tags,
+      })
+    );
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return items;
+  }, [companyRelationships, statusMap]);
 
   // Company CRUD
   const handleAdd = async () => {
@@ -445,6 +521,20 @@ export default function CompaniesPage() {
                     {companyJobs.length}
                   </span>
                 </button>
+                <button
+                  onClick={() => setActiveTab("relationships")}
+                  className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === "relationships"
+                      ? "border-indigo-500 text-indigo-700 dark:text-indigo-300"
+                      : "border-transparent text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  <ContactIcon className="w-4 h-4" />
+                  Relationships
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8b8b96]">
+                    {companyRelationships.contacts.length + companyRelationships.jobs.length + companyRelationships.notes.length}
+                  </span>
+                </button>
               </div>
 
               <div className="p-6">
@@ -496,28 +586,99 @@ export default function CompaniesPage() {
                               </div>
                             </div>
                           ) : (
-                            <div key={note.id} className="rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <p className="text-sm text-gray-700 dark:text-[#c0c0c8] whitespace-pre-wrap flex-1 min-w-0">{note.note}</p>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button onClick={() => startEditNote(note)} title="Edit note" className="p-1 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-colors">
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button onClick={() => handleDeleteNote(note)} title="Delete note" className="p-1 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-red-500 hover:bg-red-500/10 transition-colors">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                              {note.created_at && (
-                                <p className="mt-1.5 text-[11px] text-gray-400 dark:text-[#5a5a64] flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  {new Date(note.created_at).toLocaleDateString()}
-                                </p>
-                              )}
-                            </div>
+                            <NoteCard
+                              key={note.id}
+                              text={note.note}
+                              createdAt={note.created_at}
+                              onEdit={() => startEditNote(note)}
+                              onDelete={() => handleDeleteNote(note)}
+                              onMore={(t) => setNoteModal({ title: "Note", text: t })}
+                            />
                           )
                         )}
                       </div>
+                    )}
+                  </div>
+                ) : activeTab === "relationships" ? (
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                    {companyRelItems.length === 0 ? (
+                      <p className="text-sm text-gray-400 dark:text-[#5a5a64] py-6 text-center">
+                        No relationships yet. Link contacts from the Contacts page, add jobs, or add notes.
+                      </p>
+                    ) : (
+                      companyRelItems.map((item) => {
+                        if (item.type === "note") {
+                          return (
+                            <NoteCard
+                              key={item.key}
+                              text={item.note || ""}
+                              createdAt={item.created_at || undefined}
+                              tags={item.tags || []}
+                              icon={<StickyNote className="w-4 h-4" />}
+                              footerExtra={
+                                item.source === "contact" ? (
+                                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">
+                                    via {item.contact_name || "contact"}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">Company note</span>
+                                )
+                              }
+                              onOpen={() =>
+                                item.source === "contact" && item.contact_id
+                                  ? router.push(`/contacts?contact_id=${item.contact_id}`)
+                                  : setActiveTab("notes")
+                              }
+                              onMore={(t) => setNoteModal({ title: "Note", text: t })}
+                            />
+                          );
+                        }
+                        return item.href ? (
+                          <Link
+                            key={item.key}
+                            href={item.href}
+                            className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3 hover:border-indigo-500/40 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                item.type === "contact"
+                                  ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+                                  : "bg-blue-500/15 text-blue-600 dark:text-blue-300"
+                              }`}
+                            >
+                              {item.type === "contact" ? <ContactIcon className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+                              <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
+                            </div>
+                            {item.type === "job" && item.status && (
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_BADGE[item.status] || STATUS_BADGE.saved}`}>
+                                {STATUS_LABEL[item.status] || "Saved"}
+                              </span>
+                            )}
+                          </Link>
+                        ) : (
+                          <div
+                            key={item.key}
+                            className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3"
+                          >
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                item.type === "contact"
+                                  ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+                                  : "bg-blue-500/15 text-blue-600 dark:text-blue-300"
+                              }`}
+                            >
+                              {item.type === "contact" ? <ContactIcon className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+                              <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 ) : (
@@ -644,6 +805,34 @@ export default function CompaniesPage() {
         onSave={handleJobSaved}
         initialCompany={selected?.name}
       />
+
+      {noteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setNoteModal(null)} />
+          <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-2xl w-[80%] max-w-4xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/[0.08] shrink-0">
+              <h3 className="font-semibold text-gray-900 dark:text-white">{noteModal.title}</h3>
+              <button
+                onClick={() => setNoteModal(null)}
+                className="p-1 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-700 dark:text-[#c0c0c8] whitespace-pre-wrap">{noteModal.text}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
+  );
+}
+
+export default function CompaniesPage() {
+  return (
+    <Suspense fallback={<p className="p-8 text-gray-500 dark:text-[#8b8b96]">Loading companies…</p>}>
+      <CompaniesContent />
+    </Suspense>
   );
 }

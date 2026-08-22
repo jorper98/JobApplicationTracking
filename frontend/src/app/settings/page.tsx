@@ -28,17 +28,23 @@ export default function SettingsPage() {
   const [smtpTls, setSmtpTls] = useState(true);
   const [smtpSsl, setSmtpSsl] = useState(false);
 
+  // Login page settings
+  const [loginPageHtml, setLoginPageHtml] = useState("");
+
   const [savingAi, setSavingAi] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
+  const [savingLoginPage, setSavingLoginPage] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [smtpMessage, setSmtpMessage] = useState<string | null>(null);
+  const [loginPageMessage, setLoginPageMessage] = useState<string | null>(null);
   const [aiError, setAiError] = useState("");
   const [smtpError, setSmtpError] = useState("");
+  const [loginPageError, setLoginPageError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.getAISettings(), api.getSmtpSettings()])
-      .then(([ai, smtp]) => {
+    Promise.all([api.getAISettings(), api.getSmtpSettings(), api.getLoginPageSettings()])
+      .then(([ai, smtp, loginPage]) => {
         setModel(ai.gemini_model);
         setKeySet(ai.gemini_api_key_set);
         setSmtpHost(smtp.smtp_host);
@@ -50,6 +56,7 @@ export default function SettingsPage() {
         setSmtpBcc(smtp.smtp_bcc);
         setSmtpTls(smtp.smtp_tls);
         setSmtpSsl(smtp.smtp_ssl);
+        setLoginPageHtml(loginPage.login_page_html);
       })
       .catch((e) => setAiError(e?.response?.data?.detail || "Failed to load settings"))
       .finally(() => setLoading(false));
@@ -141,6 +148,21 @@ export default function SettingsPage() {
       setSmtpError(e?.response?.data?.detail || "SMTP test failed");
     } finally {
       setTestingSmtp(false);
+    }
+  };
+
+  const handleSaveLoginPage = async () => {
+    setSavingLoginPage(true);
+    setLoginPageMessage(null);
+    setLoginPageError("");
+    try {
+      const data = await api.updateLoginPageSettings(loginPageHtml);
+      setLoginPageHtml(data.login_page_html);
+      setLoginPageMessage("Login page settings saved");
+    } catch (e: any) {
+      setLoginPageError(e?.response?.data?.detail || "Failed to save login page settings");
+    } finally {
+      setSavingLoginPage(false);
     }
   };
 
@@ -338,6 +360,44 @@ export default function SettingsPage() {
             {testingSmtp ? "Sending..." : "Send test email"}
           </button>
         </div>
+      </div>
+
+      {/* Login page settings */}
+      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6 space-y-4">
+        <div>
+          <h2 className="font-semibold text-gray-900 dark:text-white">Login page</h2>
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Custom HTML rendered in the right panel of the login page (visible to everyone). Rendered as-is, so only
+            add trusted HTML.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Right panel HTML</label>
+          <textarea
+            value={loginPageHtml}
+            onChange={(e) => setLoginPageHtml(e.target.value)}
+            rows={10}
+            spellCheck={false}
+            placeholder={"<div>\n  <h3>Welcome</h3>\n  <p>Some announcement…</p>\n</div>"}
+            className="w-full bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500"
+          />
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Leave empty to show the default login page content.
+          </p>
+        </div>
+
+        {loginPageMessage && <p className="text-sm text-emerald-600 dark:text-emerald-400">{loginPageMessage}</p>}
+        {loginPageError && <p className="text-sm text-red-600 dark:text-red-400">{loginPageError}</p>}
+
+        <button
+          onClick={handleSaveLoginPage}
+          disabled={savingLoginPage}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Save className="w-4 h-4" />
+          {savingLoginPage ? "Saving..." : "Save Login Page Settings"}
+        </button>
       </div>
     </PageShell>
   );

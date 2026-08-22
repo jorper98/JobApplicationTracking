@@ -1,7 +1,8 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Job, JobNote, ApplicationStatus, User
+from app.models.models import Company, Contact, ContactJob, ContactNote, ContactNoteTag, Job, JobNote, ApplicationStatus, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text, track_usage
 from app.api.routes.companies import get_or_create_company
@@ -350,5 +351,133 @@ def preview_job_from_text(
         "location": extracted.get("location"),
         "skills": extracted.get("skills", []),
         "extracted_data": extracted,
+    }
+
+
+@router.get("/{job_id}/contacts")
+def list_job_contacts(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List contacts linked to this job."""
+    job = _get_owned_job(db, user, job_id)
+    rows = (
+        db.query(Contact)
+        .join(ContactJob, ContactJob.contact_id == Contact.id)
+        .filter(ContactJob.job_id == job.id, Contact.user_id == user.id)
+        .order_by(func.lower(Contact.name))
+        .all()
+    )
+    return [
+        {"id": c.id, "name": c.name, "email": c.email, "phone": c.phone}
+        for c in rows
+    ]
+
+
+@router.get("/{job_id}/relationships")
+def get_job_relationships(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List everything related to this job: linked contacts and notes
+    (the job's own notes plus contact notes tagged with this job)."""
+    job = _get_owned_job(db, user, job_id)
+
+    contacts = (
+        db.query(Contact)
+        .join(ContactJob, ContactJob.contact_id == Contact.id)
+        .filter(ContactJob.job_id == job.id, Contact.user_id == user.id)
+        .order_by(func.lower(Contact.name))
+        .all()
+    )
+    own_notes = (
+        db.query(JobNote)
+        .filter(JobNote.job_id == job.id)
+        .order_by(JobNote.created_at.desc())
+        .all()
+    )
+    tagged_notes = (
+        db.query(ContactNote)
+        .join(ContactNoteTag, ContactNoteTag.note_id == ContactNote.id)
+        .join(Contact, Contact.id == ContactNote.contact_id)
+        .filter(
+            ContactNoteTag.entity_type == "job",
+            ContactNoteTag.entity_id == job.id,
+            Contact.user_id == user.id,
+        )
+        .all()
+    )
+    contact_ids = {n.contact_id for n in tagged_notes}
+    contacts_by_id = {
+        c.id: c
+        for c in db.query(Contact).filter(Contact.id.in_(contact_ids)).all()
+    } if contact_ids else {}
+    tag_rows = (
+        db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_([n.id for n in tagged_notes])).all()
+        if tagged_notes else []
+    )
+    tags_by_note: dict = {}
+    for tag in tag_rows:
+        tags_by_note.setdefault(tag.note_id, []).append(tag)
+    company_names = {
+        c.id: c.name
+        for c in db.query(Company).filter(Company.id.in_([t.entity_id for t in tag_rows if t.entity_type == "company"])).all()
+    } if tag_rows else {}
+    job_names = {
+        j.id: j.title
+        for j in db.query(Job).filter(Job.id.in_([t.entity_id for t in tag_rows if t.entity_type == "job"])).all()
+    } if tag_rows else {}
+    contact_tag_names = {
+        c.id: c.name
+        for c in db.query(Contact).filter(Contact.id.in_([t.entity_id for t in tag_rows if t.entity_type == "contact"])).all()
+    } if tag_rows else {}
+
+    notes = [
+        {
+            "id": n.id,
+            "note": n.note,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+            "source": "job",
+            "contact_id": None,
+            "contact_name": None,
+            "tags": [],
+        }
+        for n in own_notes
+    ]
+    for n in tagged_notes:
+        contact = contacts_by_id.get(n.contact_id)
+        tags = []
+        for tag in tags_by_note.get(n.id, []):
+            name = None
+            if tag.entity_type == "company":
+                name = company_names.get(tag.entity_id)
+            elif tag.entity_type == "job":
+                name = job_names.get(tag.entity_id)
+            elif tag.entity_type == "contact":
+                name = contact_tag_names.get(tag.entity_id)
+            tags.append({
+                "id": tag.id,
+                "entity_type": tag.entity_type,
+                "entity_id": tag.entity_id,
+                "entity_name": name,
+            })
+        notes.append({
+            "id": n.id,
+            "note": n.note,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+            "source": "contact",
+            "contact_id": contact.id if contact else None,
+            "contact_name": contact.name if contact else None,
+            "tags": tags,
+        })
+
+    return {
+        "contacts": [
+            {"id": c.id, "name": c.name, "email": c.email, "phone": c.phone}
+            for c in contacts
+        ],
+        "notes": notes,
     }
 

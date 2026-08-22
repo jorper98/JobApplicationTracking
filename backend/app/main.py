@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text, func
 from app.core.config import settings
-from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies
+from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies, contacts
 from app.db.database import engine, Base
 from app.models import models  # ensures all models are registered with Base
 
@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.2.1",
+    version="1.2.2",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -171,6 +171,12 @@ def on_startup():
                 "CREATE INDEX IF NOT EXISTS ix_applications_job_id ON applications (job_id)",
                 "CREATE INDEX IF NOT EXISTS ix_ai_usage_user_id ON ai_usage (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_ai_usage_feature ON ai_usage (feature)",
+                "CREATE INDEX IF NOT EXISTS ix_contacts_user_id ON contacts (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_contact_notes_contact_id ON contact_notes (contact_id)",
+                "CREATE INDEX IF NOT EXISTS ix_contact_note_tags_note_id ON contact_note_tags (note_id)",
+                "CREATE INDEX IF NOT EXISTS ix_contact_companies_contact_id ON contact_companies (contact_id)",
+                "CREATE INDEX IF NOT EXISTS ix_contact_jobs_contact_id ON contact_jobs (contact_id)",
+                "CREATE INDEX IF NOT EXISTS ix_contact_contacts_contact_id ON contact_contacts (contact_id)",
                 # A job is tracked exactly once. Dedupe any legacy duplicates
                 # (keep the newest row) before enforcing the unique index.
                 "DELETE FROM applications a USING applications b "
@@ -180,6 +186,52 @@ def on_startup():
                 conn.execute(text(index_sql))
     except Exception as exc:
         print("Index creation failed:", exc)
+    # Migrate any legacy contacts.company_id / contacts.job_id single-link
+    # rows into the many-to-many tables (v1.2.x one-off). Then drop the columns.
+    try:
+        inspector = inspect(engine)
+        if "contacts" in inspector.get_table_names():
+            columns = {col["name"] for col in inspector.get_columns("contacts")}
+            if "company_id" in columns or "job_id" in columns:
+                from app.db.database import SessionLocal
+                from app.models.models import ContactCompany, ContactJob
+                db = SessionLocal()
+                try:
+                    rows = db.execute(text(
+                        "SELECT id, company_id, job_id FROM contacts "
+                        "WHERE company_id IS NOT NULL OR job_id IS NOT NULL"
+                    )).fetchall()
+                    for contact_id, company_id, job_id in rows:
+                        if company_id:
+                            exists = db.query(ContactCompany).filter(
+                                ContactCompany.contact_id == contact_id,
+                                ContactCompany.company_id == company_id,
+                            ).first()
+                            if not exists:
+                                db.add(ContactCompany(contact_id=contact_id, company_id=company_id))
+                        if job_id:
+                            exists = db.query(ContactJob).filter(
+                                ContactJob.contact_id == contact_id,
+                                ContactJob.job_id == job_id,
+                            ).first()
+                            if not exists:
+                                db.add(ContactJob(contact_id=contact_id, job_id=job_id))
+                    if rows:
+                        db.commit()
+                        print(f"Contacts relationship migration: {len(rows)} contact(s) migrated")
+                except Exception as exc:
+                    db.rollback()
+                    print("Contact relationship migration failed:", exc)
+                finally:
+                    db.close()
+                # Drop the legacy columns in a single transaction. Never inspect
+                # the table from another connection inside this transaction: the
+                # DDL lock would deadlock against it.
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE contacts DROP COLUMN IF EXISTS company_id"))
+                    conn.execute(text("ALTER TABLE contacts DROP COLUMN IF EXISTS job_id"))
+    except Exception as exc:
+        print("Contact relationship migration setup failed:", exc)
     # Apply persisted settings overrides (admin Settings tab) on startup:
     # AI model/API key and SMTP configuration.
     try:
@@ -277,6 +329,7 @@ app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(applications.router, prefix="/api/applications", tags=["Applications"])
 app.include_router(companies.router, prefix="/api/companies", tags=["Companies"])
+app.include_router(contacts.router, prefix="/api/contacts", tags=["Contacts"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(data.router, prefix="/api/data", tags=["Data"])
 

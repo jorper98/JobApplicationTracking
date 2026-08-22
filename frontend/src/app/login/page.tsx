@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -14,6 +14,14 @@ export default function LoginPage() {
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loginHtml, setLoginHtml] = useState("");
+
+  useEffect(() => {
+    api
+      .getLoginPageHtml()
+      .then((data) => setLoginHtml(data.login_page_html || ""))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +60,7 @@ export default function LoginPage() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.2.1</span>
+          <span className="text-xs text-slate-300">v1.2.2</span>
         </Link>
       </header>
 
@@ -60,7 +68,7 @@ export default function LoginPage() {
         <section className="bg-gray-100 dark:bg-[#0a0a0f] flex items-start justify-center p-10">
           <div className="w-full max-w-sm space-y-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white text-center">JobApplicationTracker</h1>
-            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.1</p>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.2</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -129,6 +137,15 @@ export default function LoginPage() {
         </section>
 
         <section className="bg-gray-100 dark:bg-[#0a0a0f] p-10 space-y-6">
+          {loginHtml.trim() && (
+            <div className="rounded-lg bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] p-6">
+              <div
+                className="login-page-html text-sm text-gray-600 dark:text-[#c0c0c8]"
+                dangerouslySetInnerHTML={{ __html: loginHtml }}
+              />
+            </div>
+          )}
+
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">JobApplicationTracker</h2>
             <p className="text-sm text-gray-500 dark:text-[#8b8b96] mt-1">Track applications, score matches, generate cover letters. Free to use.</p>

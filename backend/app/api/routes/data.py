@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company, AIUsage
+from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_admin
 from pathlib import Path
@@ -20,11 +21,18 @@ MAX_IMPORT_TOTAL_MB = 1024  # zip-bomb cap: total uncompressed size
 
 REQUIRED_FIELDS = {
     "companies": ["id", "name"],
+    "company_notes": ["id", "company_id", "note"],
+    "contacts": ["id", "name"],
+    "contact_companies": ["contact_id", "company_id"],
+    "contact_jobs": ["contact_id", "job_id"],
+    "contact_contacts": ["contact_id", "related_contact_id"],
     "resumes": ["id", "filename", "file_path"],
     "jobs": ["id", "title", "company"],
     "applications": ["id", "job_id", "status"],
     "analyses": ["id", "job_id", "resume_id"],
     "notes": ["id", "job_id", "note"],
+    "contact_notes": ["id", "contact_id", "note"],
+    "contact_note_tags": ["id", "note_id", "entity_type", "entity_id"],
 }
 
 
@@ -89,21 +97,49 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
     """Export the current user's data and uploaded files as a zip bundle."""
     jobs = db.query(Job).filter(Job.user_id == user.id).all()
     job_ids = [job.id for job in jobs]
+    companies = db.query(Company).filter(Company.user_id == user.id).all()
+    company_ids = [company.id for company in companies]
+    company_notes = (
+        db.query(CompanyNote).filter(CompanyNote.company_id.in_(company_ids)).all() if company_ids else []
+    )
+    contacts = db.query(Contact).filter(Contact.user_id == user.id).all()
+    contact_ids = [contact.id for contact in contacts]
     resumes = db.query(Resume).filter(Resume.user_id == user.id).all()
     applications = db.query(Application).filter(Application.user_id == user.id).all()
     analyses = db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).all() if job_ids else []
     notes = db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).all() if job_ids else []
+    contact_notes = db.query(ContactNote).filter(ContactNote.contact_id.in_(contact_ids)).all() if contact_ids else []
+    contact_note_ids = [n.id for n in contact_notes]
+    contact_note_tags = (
+        db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(contact_note_ids)).all() if contact_note_ids else []
+    )
+    contact_companies = (
+        db.query(ContactCompany).filter(ContactCompany.contact_id.in_(contact_ids)).all() if contact_ids else []
+    )
+    contact_jobs = (
+        db.query(ContactJob).filter(ContactJob.contact_id.in_(contact_ids)).all() if contact_ids else []
+    )
+    contact_contacts = (
+        db.query(ContactContact).filter(ContactContact.contact_id.in_(contact_ids)).all() if contact_ids else []
+    )
 
     payload = {
         "users": [
             {key: value for key, value in serialize_model(user).items() if key != "password_hash"}
         ],
-        "companies": [serialize_model(company) for company in db.query(Company).filter(Company.user_id == user.id).all()],
+        "companies": [serialize_model(company) for company in companies],
+        "company_notes": [serialize_model(note) for note in company_notes],
+        "contacts": [serialize_model(contact) for contact in contacts],
+        "contact_companies": [serialize_model(r) for r in contact_companies],
+        "contact_jobs": [serialize_model(r) for r in contact_jobs],
+        "contact_contacts": [serialize_model(r) for r in contact_contacts],
         "resumes": [serialize_model(resume) for resume in resumes],
         "jobs": [serialize_model(job) for job in jobs],
         "applications": [serialize_model(app) for app in applications],
         "analyses": [serialize_model(analysis) for analysis in analyses],
         "notes": [serialize_model(note) for note in notes],
+        "contact_notes": [serialize_model(note) for note in contact_notes],
+        "contact_note_tags": [serialize_model(tag) for tag in contact_note_tags],
     }
 
     buffer = io.BytesIO()
@@ -192,6 +228,15 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
 
     # 5. Replace the current user's data in a single transaction
     try:
+        contact_ids = [contact_id for (contact_id,) in db.query(Contact.id).filter(Contact.user_id == user.id).all()]
+        if contact_ids:
+            db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(db.query(ContactNote.id).filter(ContactNote.contact_id.in_(contact_ids)))).delete(synchronize_session=False)
+            db.query(ContactNote).filter(ContactNote.contact_id.in_(contact_ids)).delete()
+            db.query(ContactCompany).filter(ContactCompany.contact_id.in_(contact_ids)).delete()
+            db.query(ContactJob).filter(ContactJob.contact_id.in_(contact_ids)).delete()
+            db.query(ContactContact).filter(ContactContact.contact_id.in_(contact_ids)).delete()
+            db.query(ContactContact).filter(ContactContact.related_contact_id.in_(contact_ids)).delete()
+        db.query(Contact).filter(Contact.user_id == user.id).delete()
         job_ids = [job_id for (job_id,) in db.query(Job.id).filter(Job.user_id == user.id).all()]
         if job_ids:
             db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).delete()
@@ -199,6 +244,10 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         db.query(Application).filter(Application.user_id == user.id).delete()
         db.query(Resume).filter(Resume.user_id == user.id).delete()
         db.query(Job).filter(Job.user_id == user.id).delete()
+        # Delete company notes before companies (FK constraint)
+        company_ids = [company_id for (company_id,) in db.query(Company.id).filter(Company.user_id == user.id).all()]
+        if company_ids:
+            db.query(CompanyNote).filter(CompanyNote.company_id.in_(company_ids)).delete(synchronize_session=False)
         db.query(Company).filter(Company.user_id == user.id).delete()
         db.flush()
 
@@ -212,6 +261,9 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             db.add(company)
             companies_by_name[sanitized["name"].strip().lower()] = company
         db.flush()
+
+        for row in payload.get("company_notes", []):
+            db.add(CompanyNote(**filter_columns(CompanyNote, sanitize_row(row))))
 
         for row in payload.get("jobs", []):
             job_row = {**filter_columns(Job, sanitize_row(row)), "user_id": user.id}
@@ -227,6 +279,22 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
                 sanitized["file_path"] = str(user_upload_dir / Path(sanitized["file_path"]).name)
             db.add(Resume(**{**filter_columns(Resume, sanitized), "user_id": user.id}))
 
+        for row in payload.get("contacts", []):
+            db.add(Contact(**{**filter_columns(Contact, sanitize_row(row)), "user_id": user.id}))
+        db.flush()
+
+        for row in payload.get("contact_companies", []):
+            db.add(ContactCompany(**filter_columns(ContactCompany, sanitize_row(row))))
+        for row in payload.get("contact_jobs", []):
+            db.add(ContactJob(**filter_columns(ContactJob, sanitize_row(row))))
+        for row in payload.get("contact_contacts", []):
+            db.add(ContactContact(**filter_columns(ContactContact, sanitize_row(row))))
+        db.flush()
+
+        for row in payload.get("contact_notes", []):
+            db.add(ContactNote(**filter_columns(ContactNote, sanitize_row(row))))
+        for row in payload.get("contact_note_tags", []):
+            db.add(ContactNoteTag(**filter_columns(ContactNoteTag, sanitize_row(row))))
         for row in payload.get("analyses", []):
             db.add(JobAnalysis(**filter_columns(JobAnalysis, sanitize_row(row))))
 
@@ -249,14 +317,44 @@ def system_backup(admin: User = Depends(get_current_admin), db: Session = Depend
     user_ids = [u.id for u in users]
     jobs = db.query(Job).filter(Job.user_id.in_(user_ids)).all() if user_ids else []
     job_ids = [j.id for j in jobs]
+    companies = db.query(Company).filter(Company.user_id.in_(user_ids)).all() if user_ids else []
+    company_ids = [c.id for c in companies]
+    contacts = db.query(Contact).filter(Contact.user_id.in_(user_ids)).all() if user_ids else []
+    contact_ids = [c.id for c in contacts]
+    contact_note_ids_of = [
+        n.id
+        for n in db.query(ContactNote.id).filter(ContactNote.contact_id.in_(contact_ids)).all()
+    ] if contact_ids else []
     payload = {
         "users": [serialize_model(u) for u in users],
-        "companies": [serialize_model(c) for c in db.query(Company).filter(Company.user_id.in_(user_ids)).all()] if user_ids else [],
+        "companies": [serialize_model(c) for c in companies],
+        "company_notes": [
+            serialize_model(n)
+            for n in db.query(CompanyNote).filter(CompanyNote.company_id.in_(company_ids)).all()
+        ] if company_ids else [],
+        "contacts": [serialize_model(c) for c in contacts],
+        "contact_companies": [
+            serialize_model(r)
+            for r in db.query(ContactCompany).filter(ContactCompany.contact_id.in_(contact_ids)).all()
+        ] if contact_ids else [],
+        "contact_jobs": [
+            serialize_model(r)
+            for r in db.query(ContactJob).filter(ContactJob.contact_id.in_(contact_ids)).all()
+        ] if contact_ids else [],
+        "contact_contacts": [
+            serialize_model(r)
+            for r in db.query(ContactContact).filter(ContactContact.contact_id.in_(contact_ids)).all()
+        ] if contact_ids else [],
         "resumes": [serialize_model(r) for r in db.query(Resume).filter(Resume.user_id.in_(user_ids)).all()] if user_ids else [],
         "jobs": [serialize_model(j) for j in jobs],
         "applications": [serialize_model(a) for a in db.query(Application).filter(Application.user_id.in_(user_ids)).all()] if user_ids else [],
         "analyses": [serialize_model(a) for a in db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).all()] if job_ids else [],
         "notes": [serialize_model(n) for n in db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).all()] if job_ids else [],
+        "contact_notes": [serialize_model(n) for n in db.query(ContactNote).filter(ContactNote.contact_id.in_(contact_ids)).all()] if contact_ids else [],
+        "contact_note_tags": [
+            serialize_model(r)
+            for r in db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(contact_note_ids_of)).all()
+        ] if contact_note_ids_of else [],
         "ai_usage": [serialize_model(r) for r in db.query(AIUsage).filter(AIUsage.user_id.in_(user_ids)).all()] if user_ids else [],
     }
 
@@ -338,12 +436,19 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
 
     # 2. Replace ALL data in a single transaction
     try:
+        db.query(ContactNoteTag).delete()
+        db.query(ContactNote).delete()
+        db.query(ContactCompany).delete()
+        db.query(ContactJob).delete()
+        db.query(ContactContact).delete()
+        db.query(Contact).delete()
         db.query(AIUsage).delete()
         db.query(JobAnalysis).delete()
         db.query(JobNote).delete()
         db.query(Application).delete()
         db.query(Resume).delete()
         db.query(Job).delete()
+        db.query(CompanyNote).delete()
         db.query(Company).delete()
         db.query(User).delete()
         db.flush()
@@ -361,6 +466,9 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
             db.add(company)
             companies_by_id[company.id] = company
         db.flush()
+
+        for row in payload.get("company_notes", []):
+            db.add(CompanyNote(**filter_columns(CompanyNote, sanitize_row(row))))
 
         for row in payload.get("jobs", []):
             job_row = filter_columns(Job, sanitize_row(row))
@@ -380,6 +488,22 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
             db.add(Resume(**filter_columns(Resume, sanitized)))
         db.flush()
 
+        for row in payload.get("contacts", []):
+            db.add(Contact(**filter_columns(Contact, sanitize_row(row))))
+        db.flush()
+
+        for row in payload.get("contact_companies", []):
+            db.add(ContactCompany(**filter_columns(ContactCompany, sanitize_row(row))))
+        for row in payload.get("contact_jobs", []):
+            db.add(ContactJob(**filter_columns(ContactJob, sanitize_row(row))))
+        for row in payload.get("contact_contacts", []):
+            db.add(ContactContact(**filter_columns(ContactContact, sanitize_row(row))))
+        db.flush()
+
+        for row in payload.get("contact_notes", []):
+            db.add(ContactNote(**filter_columns(ContactNote, sanitize_row(row))))
+        for row in payload.get("contact_note_tags", []):
+            db.add(ContactNoteTag(**filter_columns(ContactNoteTag, sanitize_row(row))))
         for row in payload.get("analyses", []):
             db.add(JobAnalysis(**filter_columns(JobAnalysis, sanitize_row(row))))
         for row in payload.get("notes", []):
@@ -408,12 +532,27 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
 
     return {"message": "System restore complete"}
 
-    return {"message": "Data import complete"}
-
 
 @router.delete("/clear")
 def clear_data(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete ALL of the current user's data and uploaded resume files."""
+    contact_ids = [contact_id for (contact_id,) in db.query(Contact.id).filter(Contact.user_id == user.id).all()]
+    if contact_ids:
+        contact_note_ids_clear = [
+            nid
+            for (nid,) in db.query(ContactNote.id).filter(ContactNote.contact_id.in_(contact_ids)).all()
+        ]
+        if contact_note_ids_clear:
+            db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(contact_note_ids_clear)).delete(
+                synchronize_session=False
+            )
+        db.query(ContactNote).filter(ContactNote.contact_id.in_(contact_ids)).delete()
+        db.query(ContactCompany).filter(ContactCompany.contact_id.in_(contact_ids)).delete()
+        db.query(ContactJob).filter(ContactJob.contact_id.in_(contact_ids)).delete()
+        db.query(ContactContact).filter(
+            or_(ContactContact.contact_id.in_(contact_ids), ContactContact.related_contact_id.in_(contact_ids))
+        ).delete(synchronize_session=False)
+    db.query(Contact).filter(Contact.user_id == user.id).delete()
     job_ids = [job_id for (job_id,) in db.query(Job.id).filter(Job.user_id == user.id).all()]
     if job_ids:
         db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).delete()
@@ -429,7 +568,10 @@ def clear_data(user: User = Depends(get_current_user), db: Session = Depends(get
     if user_upload_dir.exists():
         shutil.rmtree(user_upload_dir, ignore_errors=True)
 
-    # Remove company records for this user
+    # Remove company records for this user (notes first due to FK constraint)
+    company_ids_clear = [company_id for (company_id,) in db.query(Company.id).filter(Company.user_id == user.id).all()]
+    if company_ids_clear:
+        db.query(CompanyNote).filter(CompanyNote.company_id.in_(company_ids_clear)).delete(synchronize_session=False)
     db.query(Company).filter(Company.user_id == user.id).delete()
     db.commit()
 

@@ -1023,5 +1023,209 @@
       "created_at": "2026-06-18T14:00:00+00:00",
       "updated_at": "2026-07-05T14:10:00+00:00"
     }
+  ],
+  "company_notes": [
+    {
+      "id": "company-note-stripe-1",
+      "company_id": "company-stripe",
+      "note": "Referral from Dana Chen. Hiring manager Marcus Webb - payments platform experience aligns well.",
+      "created_at": "2026-07-15T11:00:00+00:00"
+    },
+    {
+      "id": "company-note-vercel-1",
+      "company_id": "company-vercel",
+      "note": "Recruiter Maya Rodriguez - very responsive. Strong product/culture fit; system design round booked Aug 18.",
+      "created_at": "2026-07-21T13:20:00+00:00"
+    },
+    {
+      "id": "company-note-snowflake-1",
+      "company_id": "company-snowflake",
+      "note": "Contact Priya Patel. Team prefers dbt experience; applied through careers portal.",
+      "created_at": "2026-07-28T16:45:00+00:00"
+    },
+    {
+      "id": "company-note-datadog-1",
+      "company_id": "company-datadog",
+      "note": "HM Dan Kowalski mentioned the team owns ingestion at scale - review Kafka best practices before interviews.",
+      "created_at": "2026-08-03T10:10:00+00:00"
+    },
+    {
+      "id": "company-note-cloudflare-1",
+      "company_id": "company-cloudflare",
+      "note": "Rejected Aug 2 - they wanted more production Kubernetes experience. Reconsider in 6 months.",
+      "created_at": "2026-06-12T08:30:00+00:00"
+    },
+    {
+      "id": "company-note-hashicorp-1",
+      "company_id": "company-hashicorp",
+      "note": "No response after two follow-ups (Jul 15, Jul 30). Reapply once Vault/Consul experience grows.",
+      "created_at": "2026-06-28T15:00:00+00:00"
+    },
+    {
+      "id": "company-note-notion-1",
+      "company_id": "company-notion",
+      "note": "Paused this search - role is people-heavy, prefer IC track for now.",
+      "created_at": "2026-07-08T12:00:00+00:00"
+    },
+    {
+      "id": "company-note-linear-1",
+      "company_id": "company-linear",
+      "note": "Offer received Aug 12 - negotiating comp and start date. References provided Aug 10.",
+      "created_at": "2026-07-12T09:40:00+00:00"
+    },
+    {
+      "id": "company-note-airbnb-1",
+      "company_id": "company-airbnb",
+      "note": "Saved for later - will apply once the current interview loop finishes. Check referral program first.",
+      "created_at": "2026-07-30T17:25:00+00:00"
+    },
+    {
+      "id": "company-note-openai-1",
+      "company_id": "company-openai",
+      "note": "Rejected at resume screen - needs a stronger ML portfolio. Maybe revisit with the data engineering resume.",
+      "created_at": "2026-06-18T14:00:00+00:00"
+    }
+  ],
+  "contacts": [
+    {
+      "id": "contact-dana-chen",
+      "name": "Dana Chen",
+      "email": "dana.chen@stripe.com",
+      "phone": "+1 415-555-0142",
+      "created_at": "2026-07-15T11:30:00+00:00",
+      "updated_at": "2026-08-05T10:00:00+00:00"
+    },
+    {
+      "id": "contact-marcus-webb",
+      "name": "Marcus Webb",
+      "email": "marcus.webb@stripe.com",
+      "phone": "+1 415-555-0177",
+      "created_at": "2026-07-18T09:00:00+00:00",
+      "updated_at": "2026-08-05T10:00:00+00:00"
+    },
+    {
+      "id": "contact-maya-rodriguez",
+      "name": "Maya Rodriguez",
+      "email": "maya.rodriguez@vercel.com",
+      "phone": "+1 628-555-0193",
+      "created_at": "2026-07-21T13:45:00+00:00",
+      "updated_at": "2026-08-10T20:00:00+00:00"
+    },
+    {
+      "id": "contact-priya-patel",
+      "name": "Priya Patel",
+      "email": "priya.patel@snowflake.com",
+      "phone": "+1 425-555-0118",
+      "created_at": "2026-07-28T17:00:00+00:00",
+      "updated_at": "2026-07-30T17:00:00+00:00"
+    },
+    {
+      "id": "contact-dan-kowalski",
+      "name": "Dan Kowalski",
+      "email": "dan.kowalski@datadoghq.com",
+      "phone": "+1 646-555-0155",
+      "created_at": "2026-08-03T10:30:00+00:00",
+      "updated_at": "2026-08-06T11:00:00+00:00"
+    },
+    {
+      "id": "contact-alex-kim",
+      "name": "Alex Kim",
+      "email": "alex.kim@email.com",
+      "phone": "+1 510-555-0124",
+      "created_at": "2026-06-01T09:00:00+00:00",
+      "updated_at": "2026-08-10T09:00:00+00:00"
+    },
+    {
+      "id": "contact-sam-torres",
+      "name": "Sam Torres",
+      "email": "sam.torres@linear.app",
+      "phone": "+1 415-555-0168",
+      "created_at": "2026-07-12T10:00:00+00:00",
+      "updated_at": "2026-08-12T09:40:00+00:00"
+    }
+  ],
+  "contact_companies": [
+    { "contact_id": "contact-dana-chen", "company_id": "company-stripe" },
+    { "contact_id": "contact-marcus-webb", "company_id": "company-stripe" },
+    { "contact_id": "contact-maya-rodriguez", "company_id": "company-vercel" },
+    { "contact_id": "contact-priya-patel", "company_id": "company-snowflake" },
+    { "contact_id": "contact-dan-kowalski", "company_id": "company-datadog" },
+    { "contact_id": "contact-sam-torres", "company_id": "company-linear" }
+  ],
+  "contact_jobs": [
+    { "contact_id": "contact-dana-chen", "job_id": "job-stripe" },
+    { "contact_id": "contact-marcus-webb", "job_id": "job-stripe" },
+    { "contact_id": "contact-maya-rodriguez", "job_id": "job-vercel" },
+    { "contact_id": "contact-priya-patel", "job_id": "job-snowflake" },
+    { "contact_id": "contact-dan-kowalski", "job_id": "job-datadog" },
+    { "contact_id": "contact-sam-torres", "job_id": "job-linear" }
+  ],
+  "contact_contacts": [
+    { "contact_id": "contact-dana-chen", "related_contact_id": "contact-marcus-webb" },
+    { "contact_id": "contact-marcus-webb", "related_contact_id": "contact-dana-chen" },
+    { "contact_id": "contact-alex-kim", "related_contact_id": "contact-sam-torres" },
+    { "contact_id": "contact-sam-torres", "related_contact_id": "contact-alex-kim" },
+    { "contact_id": "contact-dana-chen", "related_contact_id": "contact-alex-kim" },
+    { "contact_id": "contact-alex-kim", "related_contact_id": "contact-dana-chen" }
+  ],
+  "contact_notes": [
+    {
+      "id": "contact-note-dana-1",
+      "contact_id": "contact-dana-chen",
+      "note": "Referred me for the Senior Backend Engineer role. Very responsive over email - best time to reach her is weekday mornings.",
+      "created_at": "2026-07-20T10:05:00+00:00"
+    },
+    {
+      "id": "contact-note-marcus-1",
+      "contact_id": "contact-marcus-webb",
+      "note": "Hiring manager for the Payments Infrastructure team. Emphasized correctness at scale and asked about my Kafka throughput numbers.",
+      "created_at": "2026-08-05T10:15:00+00:00"
+    },
+    {
+      "id": "contact-note-maya-1",
+      "contact_id": "contact-maya-rodriguez",
+      "note": "Phone screen went well - she is coordinating the system design round for Aug 18 and asked me to review edge platform docs first.",
+      "created_at": "2026-08-10T20:10:00+00:00"
+    },
+    {
+      "id": "contact-note-priya-1",
+      "contact_id": "contact-priya-patel",
+      "note": "Team prefers dbt experience; applied through the careers portal. She confirmed my application was routed to the data team.",
+      "created_at": "2026-07-30T17:05:00+00:00"
+    },
+    {
+      "id": "contact-note-dan-1",
+      "contact_id": "contact-dan-kowalski",
+      "note": "Mentioned the team owns ingestion at scale - review Kafka best practices and be ready to talk SLOs before the technical screen.",
+      "created_at": "2026-08-06T11:05:00+00:00"
+    },
+    {
+      "id": "contact-note-alex-1",
+      "contact_id": "contact-alex-kim",
+      "note": "Former colleague at Northwind Analytics. Agreed to be a reference for the Notion EM role - speaks to my mentoring and roadmap work.",
+      "created_at": "2026-08-10T09:10:00+00:00"
+    },
+    {
+      "id": "contact-note-sam-1",
+      "contact_id": "contact-sam-torres",
+      "note": "Reference for the Linear offer - speaks to my frontend craft and design-system work. Met him through the design system rollout.",
+      "created_at": "2026-08-12T09:45:00+00:00"
+    }
+  ],
+  "contact_note_tags": [
+    { "id": "tag-dana-job", "note_id": "contact-note-dana-1", "entity_type": "job", "entity_id": "job-stripe" },
+    { "id": "tag-dana-company", "note_id": "contact-note-dana-1", "entity_type": "company", "entity_id": "company-stripe" },
+    { "id": "tag-marcus-job", "note_id": "contact-note-marcus-1", "entity_type": "job", "entity_id": "job-stripe" },
+    { "id": "tag-marcus-company", "note_id": "contact-note-marcus-1", "entity_type": "company", "entity_id": "company-stripe" },
+    { "id": "tag-maya-job", "note_id": "contact-note-maya-1", "entity_type": "job", "entity_id": "job-vercel" },
+    { "id": "tag-maya-company", "note_id": "contact-note-maya-1", "entity_type": "company", "entity_id": "company-vercel" },
+    { "id": "tag-priya-job", "note_id": "contact-note-priya-1", "entity_type": "job", "entity_id": "job-snowflake" },
+    { "id": "tag-priya-company", "note_id": "contact-note-priya-1", "entity_type": "company", "entity_id": "company-snowflake" },
+    { "id": "tag-dan-job", "note_id": "contact-note-dan-1", "entity_type": "job", "entity_id": "job-datadog" },
+    { "id": "tag-dan-company", "note_id": "contact-note-dan-1", "entity_type": "company", "entity_id": "company-datadog" },
+    { "id": "tag-alex-job", "note_id": "contact-note-alex-1", "entity_type": "job", "entity_id": "job-notion" },
+    { "id": "tag-alex-company", "note_id": "contact-note-alex-1", "entity_type": "company", "entity_id": "company-notion" },
+    { "id": "tag-sam-job", "note_id": "contact-note-sam-1", "entity_type": "job", "entity_id": "job-linear" },
+    { "id": "tag-sam-company", "note_id": "contact-note-sam-1", "entity_type": "company", "entity_id": "company-linear" }
   ]
 }

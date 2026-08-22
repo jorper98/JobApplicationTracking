@@ -1,14 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { type Job } from "@/lib/types";
-import { Loader2, Plus, Trash2, Pencil, Search, X, FileText, Eye } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Search, X, FileText, Eye, Contact as ContactIcon, StickyNote } from "lucide-react";
 import { JobModal } from "@/components/JobModal";
 import { JobDescriptionModal } from "@/components/JobDescriptionModal";
 import { PageShell } from "@/components/PageShell";
+import { NoteCard, type NoteTag } from "@/components/NoteCard";
 
 interface JobNote {
   id: string;
@@ -88,6 +89,7 @@ function SkillPills({ skills, tone }: { skills: string[]; tone: "green" | "red" 
 
 function JobsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
@@ -102,8 +104,13 @@ function JobsContent() {
   const [descJob, setDescJob] = useState<Job | null>(null);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [activeTab, setActiveTab] = useState<"notes" | "resumes">("notes");
+  const [activeTab, setActiveTab] = useState<"notes" | "resumes" | "relationships">("notes");
   const [jobNotes, setJobNotes] = useState<JobNote[]>([]);
+  const [jobRelationships, setJobRelationships] = useState<{
+    contacts: { id: string; name: string; email?: string | null; phone?: string | null }[];
+    notes: { id: string; note: string; created_at?: string | null; source: string; contact_id?: string | null; contact_name?: string | null; tags?: NoteTag[] }[];
+  }>({ contacts: [], notes: [] });
+  const [noteModal, setNoteModal] = useState<{ title: string; text: string } | null>(null);
   const [noteText, setNoteText] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
   const [analysesMap, setAnalysesMap] = useState<Record<string, Analysis>>({});
@@ -305,11 +312,13 @@ function JobsContent() {
     setDrawerResumeId(null);
     setCoverLetterResumeId(null);
     try {
-      const [notes, analyses] = await Promise.all([
+      const [notes, analyses, relationships] = await Promise.all([
         api.listJobNotes(job.id),
         api.getAnalysisForJob(job.id),
+        api.getJobRelationships(job.id),
       ]);
       setJobNotes(notes || []);
+      setJobRelationships(relationships || { contacts: [], notes: [] });
       const map: Record<string, Analysis> = {};
       (analyses || []).forEach((a: Analysis) => {
         map[a.resume_id] = a;
@@ -458,6 +467,47 @@ function JobsContent() {
 
   const clResume = coverLetterResumeId ? resumes.find((r) => r.id === coverLetterResumeId) : null;
   const clAnalysis = coverLetterResumeId ? analysesMap[coverLetterResumeId] : null;
+
+  const jobRelItems = useMemo(() => {
+    const items: {
+      key: string;
+      type: "contact" | "note";
+      href?: string;
+      name: string;
+      sub: string;
+      note?: string;
+      created_at?: string | null;
+      source?: string;
+      contact_id?: string | null;
+      contact_name?: string | null;
+      tags?: NoteTag[];
+    }[] = [];
+    jobRelationships.contacts.forEach((c) =>
+      items.push({
+        key: `contact-${c.id}`,
+        type: "contact",
+        href: `/contacts?contact_id=${c.id}`,
+        name: c.name,
+        sub: [c.email, c.phone].filter(Boolean).join(" · ") || "Contact",
+      })
+    );
+    jobRelationships.notes.forEach((n) =>
+      items.push({
+        key: `note-${n.source}-${n.id}`,
+        type: "note",
+        name: n.note.split("\n")[0].trim().slice(0, 80) || "Note",
+        sub: n.source === "contact" ? `via ${n.contact_name || "contact"}` : "Job note",
+        note: n.note,
+        created_at: n.created_at,
+        source: n.source,
+        contact_id: n.contact_id,
+        contact_name: n.contact_name,
+        tags: n.tags,
+      })
+    );
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return items;
+  }, [jobRelationships]);
 
   const smallBtn =
     "inline-flex items-center gap-1 text-[11px] px-2 py-1.5 rounded-lg border border-gray-200 dark:border-white/[0.08] text-gray-700 dark:text-[#c0c0c8] bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.1] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
@@ -697,6 +747,16 @@ function JobsContent() {
                 >
                   Resumes <span className="text-xs text-gray-400 dark:text-[#6b6b72]">{resumes.length}</span>
                 </button>
+                <button
+                  onClick={() => setActiveTab("relationships")}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === "relationships"
+                      ? "bg-white dark:bg-[#2a2a35] text-gray-900 dark:text-white shadow-sm"
+                      : "text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  Relationships <span className="text-xs text-gray-400 dark:text-[#6b6b72]">{jobRelationships.contacts.length + jobRelationships.notes.length}</span>
+                </button>
               </div>
 
               {activeTab === "notes" ? (
@@ -724,43 +784,87 @@ function JobsContent() {
                   ) : (
                     <div className="space-y-3 max-h-[420px] overflow-y-auto">
                       {jobNotes.map((note) => (
-                        <div
+                        <NoteCard
                           key={note.id}
-                          className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] p-3"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap flex-1">
-                              {note.note}
-                            </p>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => {
-                                  setEditingNote(note);
-                                  setEditText(note.note);
-                                  const d = note.created_at ? new Date(note.created_at).toLocaleDateString("en-CA") : "";
-                                  setEditDate(d);
-                                  setEditDateOriginal(d);
-                                }}
-                                title="Edit note"
-                                className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-colors"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteNote(note.id)}
-                                title="Delete note"
-                                className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                          <p className="text-[11px] text-gray-400 dark:text-[#6b6b72] mt-2">
-                            {new Date(note.created_at).toLocaleString()}
-                          </p>
-                        </div>
+                          text={note.note}
+                          createdAt={note.created_at}
+                          onEdit={() => {
+                            setEditingNote(note);
+                            setEditText(note.note);
+                            const d = note.created_at ? new Date(note.created_at).toLocaleDateString("en-CA") : "";
+                            setEditDate(d);
+                            setEditDateOriginal(d);
+                          }}
+                          onDelete={() => handleDeleteNote(note.id)}
+                          onMore={(t) => setNoteModal({ title: "Note", text: t })}
+                        />
                       ))}
                     </div>
+                  )}
+                </div>
+              ) : activeTab === "relationships" ? (
+                <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                  {jobRelItems.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-[#8b8b96] py-6 text-center">
+                      No relationships yet. Link contacts from the Contacts page or add notes.
+                    </p>
+                  ) : (
+                    jobRelItems.map((item) => {
+                      if (item.type === "note") {
+                        return (
+                          <NoteCard
+                            key={item.key}
+                            text={item.note || ""}
+                            createdAt={item.created_at || undefined}
+                            tags={item.tags || []}
+                            icon={<StickyNote className="w-4 h-4" />}
+                            footerExtra={
+                              item.source === "contact" ? (
+                                <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">
+                                  via {item.contact_name || "contact"}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">Job note</span>
+                              )
+                            }
+                            onOpen={() =>
+                              item.source === "contact" && item.contact_id
+                                ? router.push(`/contacts?contact_id=${item.contact_id}`)
+                                : setActiveTab("notes")
+                            }
+                            onMore={(t) => setNoteModal({ title: "Note", text: t })}
+                          />
+                        );
+                      }
+                      return item.href ? (
+                        <Link
+                          key={item.key}
+                          href={item.href}
+                          className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3 hover:border-indigo-500/40 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                            <ContactIcon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+                            <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
+                          </div>
+                        </Link>
+                      ) : (
+                        <div
+                          key={item.key}
+                          className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                            <ContactIcon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+                            <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               ) : resumes.length === 0 ? (
@@ -1175,6 +1279,26 @@ function JobsContent() {
         description={descJob?.description}
         url={descJob?.url}
       />
+
+      {noteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setNoteModal(null)} />
+          <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-2xl w-[80%] max-w-4xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/[0.08] shrink-0">
+              <h3 className="font-semibold text-gray-900 dark:text-white">{noteModal.title}</h3>
+              <button
+                onClick={() => setNoteModal(null)}
+                className="p-1 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap">{noteModal.text}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
