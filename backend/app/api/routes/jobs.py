@@ -2,12 +2,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Company, Contact, ContactJob, ContactNote, ContactNoteTag, Job, JobNote, ApplicationStatus, User
+from app.models.models import Company, Contact, ContactJob, ContactNote, ContactNoteTag, Job, JobAnalysis, JobJob, JobNote, ApplicationStatus, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text, track_usage
 from app.api.routes.companies import get_or_create_company
 from app.api.routes.applications import get_or_create_application
 from app.core.auth import get_current_user
+from app.core.activity import log_activity
 from app.core.rate_limit import ai_quota_limit
 from typing import List
 
@@ -101,6 +102,7 @@ def create_job(
     # Track the new job in the SAME transaction: a failure here can never
     # leave a job committed without its tracker entry.
     get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
+    log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
 
@@ -152,6 +154,7 @@ def update_job(job_id: str, job_data: JobUpdate, user: User = Depends(get_curren
             continue
         setattr(job, field, value)
 
+    log_activity(db, user.id, "updated", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
     return job
@@ -162,6 +165,7 @@ def delete_job(job_id: str, user: User = Depends(get_current_user), db: Session 
     """Delete a job and all linked notes, analyses, and applications."""
     job = _get_owned_job(db, user, job_id)
 
+    log_activity(db, user.id, "deleted", "job", job.id, job.title)
     db.delete(job)
     db.commit()
     return {"message": "Job deleted"}
@@ -175,10 +179,11 @@ def list_job_notes(job_id: str, user: User = Depends(get_current_user), db: Sess
 
 @router.post("/{job_id}/notes", response_model=JobNoteResponse)
 def create_job_note(job_id: str, note_data: JobNoteCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _get_owned_job(db, user, job_id)
+    job = _get_owned_job(db, user, job_id)
 
     job_note = JobNote(job_id=job_id, note=note_data.note)
     db.add(job_note)
+    log_activity(db, user.id, "created", "note", job_note.id, f"Note on {job.title}", details=note_data.note.strip()[:120])
     db.commit()
     db.refresh(job_note)
     return job_note
@@ -186,13 +191,14 @@ def create_job_note(job_id: str, note_data: JobNoteCreate, user: User = Depends(
 
 @router.patch("/{job_id}/notes/{note_id}", response_model=JobNoteResponse)
 def update_job_note(job_id: str, note_id: str, note_data: JobNoteUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _get_owned_job(db, user, job_id)
+    job = _get_owned_job(db, user, job_id)
     note = db.query(JobNote).filter(JobNote.id == note_id, JobNote.job_id == job_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     note.note = note_data.note
     if note_data.created_at is not None:
         note.created_at = note_data.created_at
+    log_activity(db, user.id, "updated", "note", note.id, f"Note on {job.title}")
     db.commit()
     db.refresh(note)
     return note
@@ -200,10 +206,11 @@ def update_job_note(job_id: str, note_id: str, note_data: JobNoteUpdate, user: U
 
 @router.delete("/{job_id}/notes/{note_id}")
 def delete_job_note(job_id: str, note_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _get_owned_job(db, user, job_id)
+    job = _get_owned_job(db, user, job_id)
     note = db.query(JobNote).filter(JobNote.id == note_id, JobNote.job_id == job_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    log_activity(db, user.id, "deleted", "note", note.id, f"Note on {job.title}")
     db.delete(note)
     db.commit()
     return {"message": "Note deleted"}
@@ -250,6 +257,7 @@ def create_job_from_url(
     db.add(job)
     db.flush()
     get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
+    log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
     return job
@@ -322,6 +330,7 @@ def create_job_from_text(
     db.add(job)
     db.flush()
     get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
+    log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
     return job
@@ -473,11 +482,119 @@ def get_job_relationships(
             "tags": tags,
         })
 
+    company = None
+    if job.company_id:
+        company_obj = (
+            db.query(Company)
+            .filter(Company.id == job.company_id, Company.user_id == user.id)
+            .first()
+        )
+        if company_obj:
+            company = {"id": company_obj.id, "name": company_obj.name}
+
+    related_jobs = (
+        db.query(Job)
+        .join(JobJob, JobJob.related_job_id == Job.id)
+        .filter(JobJob.job_id == job.id, Job.user_id == user.id)
+        .all()
+    )
+
     return {
+        "company": company,
         "contacts": [
             {"id": c.id, "name": c.name, "email": c.email, "phone": c.phone}
             for c in contacts
         ],
+        "related_jobs": [
+            {"id": j.id, "title": j.title, "company": j.company}
+            for j in related_jobs
+        ],
         "notes": notes,
     }
 
+
+@router.post("/{job_id}/relationships")
+def add_job_relationship(
+    job_id: str,
+    payload: dict,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Link this job to a contact, company, or another job."""
+    job = _get_owned_job(db, user, job_id)
+    entity_type = payload.get("entity_type")
+    entity_id = payload.get("entity_id")
+    if not entity_type or not entity_id:
+        raise HTTPException(status_code=400, detail="entity_type and entity_id are required")
+
+    if entity_type == "contact":
+        contact = db.query(Contact).filter(Contact.id == entity_id, Contact.user_id == user.id).first()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        exists = db.query(ContactJob).filter(
+            ContactJob.contact_id == entity_id, ContactJob.job_id == job.id
+        ).first()
+        if not exists:
+            db.add(ContactJob(contact_id=entity_id, job_id=job.id))
+            log_activity(db, user.id, "updated", "job", job.id, job.title, details=f"linked contact: {contact.name}")
+            db.commit()
+    elif entity_type == "company":
+        company = db.query(Company).filter(Company.id == entity_id, Company.user_id == user.id).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+        job.company_id = company.id
+        job.company = company.name
+        log_activity(db, user.id, "updated", "job", job.id, job.title, details=f"linked company: {company.name}")
+        db.commit()
+    elif entity_type == "job":
+        if entity_id == job_id:
+            raise HTTPException(status_code=400, detail="Cannot link a job to itself")
+        other = db.query(Job).filter(Job.id == entity_id, Job.user_id == user.id).first()
+        if not other:
+            raise HTTPException(status_code=404, detail="Job not found")
+        exists = db.query(JobJob).filter(
+            JobJob.job_id == job.id, JobJob.related_job_id == entity_id
+        ).first()
+        if not exists:
+            db.add(JobJob(job_id=job.id, related_job_id=entity_id))
+            db.add(JobJob(job_id=entity_id, related_job_id=job.id))
+            log_activity(db, user.id, "updated", "job", job.id, job.title, details=f"linked job: {other.title}")
+            db.commit()
+    else:
+        raise HTTPException(status_code=400, detail="Invalid entity_type")
+    return {"message": "Relationship added"}
+
+
+@router.delete("/{job_id}/relationships/{entity_type}/{entity_id}")
+def remove_job_relationship(
+    job_id: str,
+    entity_type: str,
+    entity_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Unlink this job from a contact, company, or another job."""
+    job = _get_owned_job(db, user, job_id)
+    if entity_type == "contact":
+        db.query(ContactJob).filter(
+            ContactJob.contact_id == entity_id, ContactJob.job_id == job.id
+        ).delete()
+        log_activity(db, user.id, "updated", "job", job.id, job.title, details=f"unlinked contact: {entity_id}")
+        db.commit()
+    elif entity_type == "company":
+        if job.company_id == entity_id:
+            job.company_id = None
+            log_activity(db, user.id, "updated", "job", job.id, job.title, details="unlinked company")
+            db.commit()
+    elif entity_type == "job":
+        db.query(JobJob).filter(
+            JobJob.job_id == job.id, JobJob.related_job_id == entity_id
+        ).delete()
+        db.query(JobJob).filter(
+            JobJob.job_id == entity_id, JobJob.related_job_id == job.id
+        ).delete()
+        log_activity(db, user.id, "updated", "job", job.id, job.title, details=f"unlinked job: {entity_id}")
+        db.commit()
+    else:
+        raise HTTPException(status_code=400, detail="Invalid entity_type")
+    return {"message": "Relationship removed"}

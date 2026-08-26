@@ -3,7 +3,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact
+from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, JobJob, ActivityLog
+from app.core.activity import log_activity
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_admin
 from pathlib import Path
@@ -12,6 +13,7 @@ import enum as enum_module
 import io
 import json
 import shutil
+import uuid
 import zipfile
 
 router = APIRouter()
@@ -28,6 +30,7 @@ REQUIRED_FIELDS = {
     "contact_contacts": ["contact_id", "related_contact_id"],
     "resumes": ["id", "filename", "file_path"],
     "jobs": ["id", "title", "company"],
+    "job_jobs": ["job_id", "related_job_id"],
     "applications": ["id", "job_id", "status"],
     "analyses": ["id", "job_id", "resume_id"],
     "notes": ["id", "job_id", "note"],
@@ -122,6 +125,9 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
     contact_contacts = (
         db.query(ContactContact).filter(ContactContact.contact_id.in_(contact_ids)).all() if contact_ids else []
     )
+    job_jobs = (
+        db.query(JobJob).filter(JobJob.job_id.in_(job_ids)).all() if job_ids else []
+    )
 
     payload = {
         "users": [
@@ -135,6 +141,7 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
         "contact_contacts": [serialize_model(r) for r in contact_contacts],
         "resumes": [serialize_model(resume) for resume in resumes],
         "jobs": [serialize_model(job) for job in jobs],
+        "job_jobs": [serialize_model(r) for r in job_jobs],
         "applications": [serialize_model(app) for app in applications],
         "analyses": [serialize_model(analysis) for analysis in analyses],
         "notes": [serialize_model(note) for note in notes],
@@ -241,6 +248,8 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         if job_ids:
             db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).delete()
             db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).delete()
+            db.query(JobJob).filter(JobJob.job_id.in_(job_ids)).delete()
+            db.query(JobJob).filter(JobJob.related_job_id.in_(job_ids)).delete()
         db.query(Application).filter(Application.user_id == user.id).delete()
         db.query(Resume).filter(Resume.user_id == user.id).delete()
         db.query(Job).filter(Job.user_id == user.id).delete()
@@ -249,61 +258,126 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         if company_ids:
             db.query(CompanyNote).filter(CompanyNote.company_id.in_(company_ids)).delete(synchronize_session=False)
         db.query(Company).filter(Company.user_id == user.id).delete()
+        db.query(ActivityLog).filter(ActivityLog.user_id == user.id).delete()
         db.flush()
 
-        # Companies first so jobs can be linked by name
+        # Companies first so jobs can be linked by name. Every imported row gets
+        # a fresh id so a backup can be restored into any account without
+        # colliding with primary keys already owned by other users.
         companies_by_name = {}
+        company_id_map = {}
         for row in payload.get("companies", []):
             sanitized = sanitize_row(row)
             if not sanitized.get("name"):
                 continue
-            company = Company(**{**filter_columns(Company, sanitized), "user_id": user.id})
+            new_id = str(uuid.uuid4())
+            company_id_map[sanitized.get("id")] = new_id
+            company = Company(**{**filter_columns(Company, sanitized), "id": new_id, "user_id": user.id})
             db.add(company)
             companies_by_name[sanitized["name"].strip().lower()] = company
         db.flush()
 
         for row in payload.get("company_notes", []):
-            db.add(CompanyNote(**filter_columns(CompanyNote, sanitize_row(row))))
+            sanitized = sanitize_row(row)
+            data = filter_columns(CompanyNote, sanitized)
+            data["id"] = str(uuid.uuid4())
+            data["company_id"] = company_id_map.get(data.get("company_id"))
+            db.add(CompanyNote(**data))
 
+        job_id_map = {}
         for row in payload.get("jobs", []):
             job_row = {**filter_columns(Job, sanitize_row(row)), "user_id": user.id}
+            new_id = str(uuid.uuid4())
+            job_id_map[job_row.get("id")] = new_id
+            job_row["id"] = new_id
             job_row.pop("company_id", None)
             company_name = (job_row.get("company") or "").strip().lower()
             if company_name in companies_by_name:
                 job_row["company_id"] = companies_by_name[company_name].id
             db.add(Job(**job_row))
 
+        resume_id_map = {}
         for row in payload.get("resumes", []):
             sanitized = sanitize_row(row)
             if sanitized.get("file_path"):
                 sanitized["file_path"] = str(user_upload_dir / Path(sanitized["file_path"]).name)
-            db.add(Resume(**{**filter_columns(Resume, sanitized), "user_id": user.id}))
+            new_id = str(uuid.uuid4())
+            resume_id_map[sanitized.get("id")] = new_id
+            db.add(Resume(**{**filter_columns(Resume, sanitized), "id": new_id, "user_id": user.id}))
 
+        contact_id_map = {}
         for row in payload.get("contacts", []):
-            db.add(Contact(**{**filter_columns(Contact, sanitize_row(row)), "user_id": user.id}))
+            sanitized = sanitize_row(row)
+            new_id = str(uuid.uuid4())
+            contact_id_map[sanitized.get("id")] = new_id
+            db.add(Contact(**{**filter_columns(Contact, sanitized), "id": new_id, "user_id": user.id}))
         db.flush()
 
         for row in payload.get("contact_companies", []):
-            db.add(ContactCompany(**filter_columns(ContactCompany, sanitize_row(row))))
+            data = filter_columns(ContactCompany, sanitize_row(row))
+            data["contact_id"] = contact_id_map.get(data.get("contact_id"))
+            data["company_id"] = company_id_map.get(data.get("company_id"))
+            db.add(ContactCompany(**data))
         for row in payload.get("contact_jobs", []):
-            db.add(ContactJob(**filter_columns(ContactJob, sanitize_row(row))))
+            data = filter_columns(ContactJob, sanitize_row(row))
+            data["contact_id"] = contact_id_map.get(data.get("contact_id"))
+            data["job_id"] = job_id_map.get(data.get("job_id"))
+            db.add(ContactJob(**data))
         for row in payload.get("contact_contacts", []):
-            db.add(ContactContact(**filter_columns(ContactContact, sanitize_row(row))))
+            data = filter_columns(ContactContact, sanitize_row(row))
+            data["contact_id"] = contact_id_map.get(data.get("contact_id"))
+            data["related_contact_id"] = contact_id_map.get(data.get("related_contact_id"))
+            db.add(ContactContact(**data))
         db.flush()
 
+        contact_note_id_map = {}
         for row in payload.get("contact_notes", []):
-            db.add(ContactNote(**filter_columns(ContactNote, sanitize_row(row))))
+            sanitized = sanitize_row(row)
+            new_id = str(uuid.uuid4())
+            contact_note_id_map[sanitized.get("id")] = new_id
+            data = filter_columns(ContactNote, sanitized)
+            data["id"] = new_id
+            data["contact_id"] = contact_id_map.get(data.get("contact_id"))
+            db.add(ContactNote(**data))
         for row in payload.get("contact_note_tags", []):
-            db.add(ContactNoteTag(**filter_columns(ContactNoteTag, sanitize_row(row))))
+            data = filter_columns(ContactNoteTag, sanitize_row(row))
+            data["id"] = str(uuid.uuid4())
+            data["note_id"] = contact_note_id_map.get(data.get("note_id"))
+            entity_type = data.get("entity_type")
+            entity_id = data.get("entity_id")
+            if entity_type == "job":
+                data["entity_id"] = job_id_map.get(entity_id)
+            elif entity_type == "company":
+                data["entity_id"] = company_id_map.get(entity_id)
+            elif entity_type == "contact":
+                data["entity_id"] = contact_id_map.get(entity_id)
+            db.add(ContactNoteTag(**data))
         for row in payload.get("analyses", []):
-            db.add(JobAnalysis(**filter_columns(JobAnalysis, sanitize_row(row))))
+            data = filter_columns(JobAnalysis, sanitize_row(row))
+            data["id"] = str(uuid.uuid4())
+            data["job_id"] = job_id_map.get(data.get("job_id"))
+            data["resume_id"] = resume_id_map.get(data.get("resume_id"))
+            db.add(JobAnalysis(**data))
 
         for row in payload.get("notes", []):
-            db.add(JobNote(**filter_columns(JobNote, sanitize_row(row))))
+            data = filter_columns(JobNote, sanitize_row(row))
+            data["id"] = str(uuid.uuid4())
+            data["job_id"] = job_id_map.get(data.get("job_id"))
+            db.add(JobNote(**data))
 
         for row in payload.get("applications", []):
-            db.add(Application(**{**filter_columns(Application, sanitize_row(row)), "user_id": user.id}))
+            data = {**filter_columns(Application, sanitize_row(row)), "user_id": user.id}
+            data["id"] = str(uuid.uuid4())
+            data["job_id"] = job_id_map.get(data.get("job_id"))
+            db.add(Application(**data))
 
+        for row in payload.get("job_jobs", []):
+            data = filter_columns(JobJob, sanitize_row(row))
+            data["job_id"] = job_id_map.get(data.get("job_id"))
+            data["related_job_id"] = job_id_map.get(data.get("related_job_id"))
+            db.add(JobJob(**data))
+
+        log_activity(db, user.id, "created", "data", entity_name="Imported backup")
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -355,6 +429,7 @@ def system_backup(admin: User = Depends(get_current_admin), db: Session = Depend
             serialize_model(r)
             for r in db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(contact_note_ids_of)).all()
         ] if contact_note_ids_of else [],
+        "job_jobs": [serialize_model(r) for r in db.query(JobJob).filter(JobJob.job_id.in_(job_ids)).all()] if job_ids else [],
         "ai_usage": [serialize_model(r) for r in db.query(AIUsage).filter(AIUsage.user_id.in_(user_ids)).all()] if user_ids else [],
     }
 
@@ -445,11 +520,13 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
         db.query(AIUsage).delete()
         db.query(JobAnalysis).delete()
         db.query(JobNote).delete()
+        db.query(JobJob).delete()
         db.query(Application).delete()
         db.query(Resume).delete()
         db.query(Job).delete()
         db.query(CompanyNote).delete()
         db.query(Company).delete()
+        db.query(ActivityLog).delete()
         db.query(User).delete()
         db.flush()
 
@@ -498,6 +575,8 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
             db.add(ContactJob(**filter_columns(ContactJob, sanitize_row(row))))
         for row in payload.get("contact_contacts", []):
             db.add(ContactContact(**filter_columns(ContactContact, sanitize_row(row))))
+        for row in payload.get("job_jobs", []):
+            db.add(JobJob(**filter_columns(JobJob, sanitize_row(row))))
         db.flush()
 
         for row in payload.get("contact_notes", []):
@@ -557,10 +636,14 @@ def clear_data(user: User = Depends(get_current_user), db: Session = Depends(get
     if job_ids:
         db.query(JobAnalysis).filter(JobAnalysis.job_id.in_(job_ids)).delete()
         db.query(JobNote).filter(JobNote.job_id.in_(job_ids)).delete()
+        db.query(JobJob).filter(JobJob.job_id.in_(job_ids)).delete()
+        db.query(JobJob).filter(JobJob.related_job_id.in_(job_ids)).delete()
     db.query(Application).filter(Application.user_id == user.id).delete()
     db.query(Resume).filter(Resume.user_id == user.id).delete()
     if job_ids:
         db.query(Job).filter(Job.id.in_(job_ids)).delete()
+    db.query(ActivityLog).filter(ActivityLog.user_id == user.id).delete()
+    log_activity(db, user.id, "deleted", "data", entity_name="All data")
     db.commit()
 
     # Remove uploaded resume files for this user

@@ -30,3 +30,16 @@ def test_create_application_is_idempotent(client):
     board = client.get("/api/applications/kanban").json()
     saved = [c for c in board["saved"] if c["job_id"] == job["id"]]
     assert len(saved) == 1, "duplicate create must not produce duplicate tracker entries"
+
+
+def test_job_relationships_include_company(client):
+    _register_and_login(client)
+    job = client.post("/api/jobs/", json={"title": "Backend Engineer", "company": "Acme"}).json()
+    assert job["company_id"]
+
+    resp = client.get(f"/api/jobs/{job['id']}/relationships")
+    assert resp.status_code == 200
+    rels = resp.json()
+    assert rels["company"] == {"id": job["company_id"], "name": "Acme"}
+    assert isinstance(rels["contacts"], list)
+    assert isinstance(rels["notes"], list)

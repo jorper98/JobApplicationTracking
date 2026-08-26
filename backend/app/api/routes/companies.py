@@ -12,6 +12,7 @@ from app.schemas.schemas import (
     CompanyNoteResponse,
 )
 from app.core.auth import get_current_user
+from app.core.activity import log_activity
 from typing import List
 
 router = APIRouter()
@@ -42,6 +43,7 @@ def get_or_create_company(db: Session, user_id: str, name: str) -> Company:
     company = Company(user_id=user_id, name=name)
     db.add(company)
     db.flush()
+    log_activity(db, user_id, "created", "company", company.id, company.name)
     return company
 
 
@@ -99,6 +101,7 @@ def create_company(
     company = get_or_create_company(db, user.id, company_data.name)
     if company_data.notes is not None and company.notes != company_data.notes:
         company.notes = company_data.notes
+        log_activity(db, user.id, "updated", "company", company.id, company.name, details="notes")
     db.commit()
     db.refresh(company)
     return _with_job_count(db, user, [company])[0]
@@ -120,6 +123,7 @@ def update_company(
             continue
         setattr(company, field, value)
 
+    log_activity(db, user.id, "updated", "company", company.id, company.name)
     db.commit()
     db.refresh(company)
     return _with_job_count(db, user, [company])[0]
@@ -129,6 +133,7 @@ def update_company(
 def delete_company(company_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a company. Jobs keep their company name but lose the link."""
     company = _get_owned_company(db, user, company_id)
+    log_activity(db, user.id, "deleted", "company", company.id, company.name)
     db.query(Job).filter(Job.company_id == company_id, Job.user_id == user.id).update({Job.company_id: None})
     db.delete(company)
     db.commit()
@@ -164,6 +169,7 @@ def create_company_note(
         raise HTTPException(status_code=400, detail="Note cannot be empty")
     note = CompanyNote(company_id=company.id, note=note_data.note.strip())
     db.add(note)
+    log_activity(db, user.id, "created", "note", note.id, f"Note on {company.name}", details=note_data.note.strip()[:120])
     db.commit()
     db.refresh(note)
     return note
@@ -189,6 +195,7 @@ def update_company_note(
     note.note = note_data.note.strip()
     if note_data.created_at:
         note.created_at = note_data.created_at
+    log_activity(db, user.id, "updated", "note", note.id, f"Note on {company.name}")
     db.commit()
     db.refresh(note)
     return note
@@ -210,6 +217,7 @@ def delete_company_note(
     )
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    log_activity(db, user.id, "deleted", "note", note.id, f"Note on {company.name}")
     db.delete(note)
     db.commit()
     return {"message": "Note deleted"}

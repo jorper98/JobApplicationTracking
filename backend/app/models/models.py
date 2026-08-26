@@ -49,6 +49,7 @@ class User(Base):
     companies = relationship("Company", back_populates="user", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
     ai_usage = relationship("AIUsage", back_populates="user", cascade="all, delete-orphan")
+    activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
 
 
 class Resume(Base):
@@ -142,6 +143,16 @@ class ContactContact(Base):
     related_contact = relationship("Contact", foreign_keys=[related_contact_id])
 
 
+class JobJob(Base):
+    __tablename__ = "job_jobs"
+
+    job_id = Column(String, ForeignKey("jobs.id"), primary_key=True)
+    related_job_id = Column(String, ForeignKey("jobs.id"), primary_key=True)
+
+    job = relationship("Job", foreign_keys=[job_id], back_populates="related_jobs")
+    related_job = relationship("Job", foreign_keys=[related_job_id])
+
+
 class ContactNote(Base):
     __tablename__ = "contact_notes"
 
@@ -185,6 +196,8 @@ class Job(Base):
     applications = relationship("Application", back_populates="job", cascade="all, delete-orphan")
     analyses = relationship("JobAnalysis", back_populates="job", cascade="all, delete-orphan")
     notes = relationship("JobNote", back_populates="job", cascade="all, delete-orphan")
+    related_jobs = relationship("JobJob", foreign_keys="JobJob.job_id", back_populates="job", cascade="all, delete-orphan")
+    related_to = relationship("JobJob", foreign_keys="JobJob.related_job_id", back_populates="related_job", cascade="all, delete-orphan")
     user = relationship("User", back_populates="jobs")
     company_record = relationship("Company", back_populates="jobs")
 
@@ -251,6 +264,23 @@ class AIUsage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="ai_usage")
+
+
+class ActivityLog(Base):
+    """Simple audit trail: who did what and when (date/time, record, action)."""
+
+    __tablename__ = "activity_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    action = Column(String, nullable=False, index=True)  # created | updated | deleted
+    entity_type = Column(String, nullable=False, index=True)  # job | company | contact | ...
+    entity_id = Column(String, nullable=True)
+    entity_name = Column(String, nullable=True)  # human-readable record label
+    details = Column(Text, nullable=True)  # optional extra, e.g. "saved -> applied"
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user = relationship("User", back_populates="activity_logs")
 
 
 

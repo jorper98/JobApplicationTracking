@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.2.3
+
+### Features
+
+- New Activity log: adds, edits, and deletes of jobs, applications (tracker
+  moves with the status transition, e.g. "saved -> applied"), companies,
+  contacts, notes, resumes, and data import/clear are recorded with date,
+  time, record, and action, and shown on the new Activity page
+- Jobs page: the Relationships tab now shows the job's linked company by
+  default, supports linking/unlinking contacts, companies, and other jobs,
+  and job-to-job relationships are stored in a new `job_jobs` table
+- Companies page: the Relationships tab now supports linking/unlinking
+  contacts and jobs with the same control style as Contacts
+- Contacts page: tags on notes are added on dropdown change (no separate
+  "Add tag" button)
+- Dashboard stat boxes are sticky and show Jobs, Applications, Companies,
+  Contacts, and Resumes; Applications excludes Saved and Not Pursued
+- Jobs relationships API now returns the job's `company`, `contacts`,
+  `related_jobs`, and `notes`
+
+### Bug fixes
+
+- Data import no longer fails with a duplicate-key error when the backup
+  contains IDs that already exist in another account (e.g. importing the
+  sample data twice, or restoring a shared export): every imported record now
+  gets a fresh ID and all relationships (companies, jobs, resumes, contacts,
+  notes, tags, analyses, applications) are remapped to the new IDs
+
+### Version bump
+
+- Version bumped to 1.2.3
+
 ## v1.2.2
 
 ### Features

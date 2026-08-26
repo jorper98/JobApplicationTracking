@@ -37,31 +37,30 @@ export default function DashboardPage() {
   const [board, setBoard] = useState<Record<string, Card[]>>({});
   const [loading, setLoading] = useState(true);
   const [greetingText, setGreetingText] = useState("Hello");
+  const [companyCount, setCompanyCount] = useState(0);
+  const [contactCount, setContactCount] = useState(0);
   const [resumeCount, setResumeCount] = useState(0);
+  const [jobCount, setJobCount] = useState(0);
 
   useEffect(() => {
     const h = new Date().getHours();
     setGreetingText(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
 
-    api
-      .getKanban()
-      .then(setBoard)
-      .catch(console.error);
-
-    api
-      .listResumes()
-      .then((resumes) => setResumeCount(resumes.length))
+    Promise.all([
+      api.getKanban().then(setBoard),
+      api.listCompanies().then((list) => setCompanyCount(list.length)),
+      api.listContacts().then((list) => setContactCount(list.length)),
+      api.listResumes().then((list) => setResumeCount(list.length)),
+      api.listJobs().then((list) => setJobCount(list.length)),
+    ])
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
   const all = Object.values(board).flat();
   const total = all.length;
-  const saved = board.saved?.length || 0;
-  const interview = board.interview?.length || 0;
-  const offer = board.offer?.length || 0;
-  const archived =
-    (board.rejected?.length || 0) + (board.not_pursued?.length || 0) + (board.ghosted?.length || 0);
+  const applicationsCount =
+    total - (board.saved?.length || 0) - (board.not_pursued?.length || 0);
 
   const pieData = Object.entries(STATUS_META)
     .map(([key, meta]) => ({ name: meta.label, value: board[key]?.length || 0, color: meta.color }))
@@ -72,12 +71,11 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   const cards = [
-    { label: "Saved", value: saved, color: "#94a3b8" },
-    { label: "Applications", value: total, color: "#60a5fa" },
-    { label: "Interviews", value: interview, color: "#fbbf24" },
-    { label: "Offers", value: offer, color: "#4ade80" },
+    { label: "Jobs", value: jobCount, color: "#60a5fa" },
+    { label: "Applications", value: applicationsCount, color: "#34d399" },
+    { label: "Companies", value: companyCount, color: "#fbbf24" },
+    { label: "Contacts", value: contactCount, color: "#a78bfa" },
     { label: "Resumes", value: resumeCount, color: "#22d3ee" },
-    { label: "Archived", value: archived, color: "#8b8b96" },
   ];
 
   return (
@@ -90,23 +88,23 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       {loading ? (
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="aspect-square bg-white dark:bg-[#16161f] rounded-xl animate-pulse" />
+        <div className="flex flex-wrap gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="w-20 h-20 bg-white dark:bg-[#16161f] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="flex flex-wrap gap-3">
           {cards.map((card) => (
             <div
               key={card.label}
               title={card.label}
-              className="aspect-square bg-white dark:bg-[#16161f] rounded-xl border border-gray-200 dark:border-white/[0.08] flex flex-col items-center justify-center gap-0.5"
+              className="w-20 h-20 bg-white dark:bg-[#16161f] rounded-xl border border-gray-200 dark:border-white/[0.08] flex flex-col items-center justify-center gap-0.5"
             >
-              <p className="text-2xl font-bold" style={{ color: card.color }}>
+              <p className="text-lg font-bold" style={{ color: card.color }}>
                 {card.value}
               </p>
-              <p className="text-xs text-gray-500 dark:text-[#8b8b96]">{card.label}</p>
+              <p className="text-[10px] text-gray-500 dark:text-[#8b8b96]">{card.label}</p>
             </div>
           ))}
         </div>

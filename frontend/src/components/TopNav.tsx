@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, Building2, Contact, FileText, LayoutDashboard, Target, PlusCircle, Database, Users, Settings, Activity } from "lucide-react";
+import { Briefcase, Building2, Contact, FileText, LayoutDashboard, Target, PlusCircle, Database, Users, Settings, Activity, History } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ const nav = [
   { href: "/contacts", label: "Contacts", icon: Contact },
   { href: "/jobs", label: "Jobs", icon: Target },
   { href: "/tracker", label: "Tracker", icon: Briefcase },
+  { href: "/activity", label: "Activity", icon: History },
   { href: "/data", label: "Data", icon: Database },
 ];
 

@@ -87,6 +87,10 @@ function CompaniesContent() {
     jobs: { id: string; title: string; company: string }[];
     notes: { id: string; note: string; created_at?: string | null; source: string; contact_id?: string | null; contact_name?: string | null; tags?: NoteTag[] }[];
   }>({ contacts: [], jobs: [], notes: [] });
+  const [contacts, setContacts] = useState<{ id: string; name: string; email?: string | null; phone?: string | null }[]>([]);
+  const [relType, setRelType] = useState<"contact" | "job">("contact");
+  const [relEntityId, setRelEntityId] = useState("");
+  const [relBusy, setRelBusy] = useState(false);
   const [noteModal, setNoteModal] = useState<{ title: string; text: string } | null>(null);
 
   // Job modal
@@ -114,6 +118,10 @@ function CompaniesContent() {
         );
         setStatusMap(map);
       })
+      .catch(console.error);
+    api
+      .listContacts()
+      .then(setContacts)
       .catch(console.error);
   };
 
@@ -163,6 +171,18 @@ function CompaniesContent() {
     [selected, allJobs]
   );
 
+  const availableRelOptions = useMemo(() => {
+    if (!selected) return [];
+    if (relType === "contact") {
+      return contacts
+        .filter((c) => !companyRelationships.contacts.some((lc) => lc.id === c.id))
+        .map((c) => ({ id: c.id, name: c.name }));
+    }
+    return allJobs
+      .filter((j) => j.company_id !== selected.id)
+      .map((j) => ({ id: j.id, name: `${j.title} · ${j.company}` }));
+  }, [relType, selected, contacts, companyRelationships.contacts, allJobs]);
+
   const companyRelItems = useMemo(() => {
     const items: {
       key: string;
@@ -171,6 +191,7 @@ function CompaniesContent() {
       name: string;
       sub: string;
       status?: string;
+      job_id?: string;
       note?: string;
       created_at?: string | null;
       source?: string;
@@ -185,6 +206,7 @@ function CompaniesContent() {
         href: `/contacts?contact_id=${c.id}`,
         name: c.name,
         sub: [c.email, c.phone].filter(Boolean).join(" · ") || "Contact",
+        contact_id: c.id,
       })
     );
     companyRelationships.jobs.forEach((j) =>
@@ -195,6 +217,7 @@ function CompaniesContent() {
         name: j.title,
         sub: j.company,
         status: statusMap[j.id] || "saved",
+        job_id: j.id,
       })
     );
     companyRelationships.notes.forEach((n) =>
@@ -340,6 +363,47 @@ function CompaniesContent() {
       setError(e?.response?.data?.detail || "Failed to delete note");
     } finally {
       setNoteBusy(false);
+    }
+  };
+
+  const handleAddRelationship = async () => {
+    if (!selected || !relEntityId) return;
+    setRelBusy(true);
+    setError("");
+    try {
+      if (relType === "contact") {
+        await api.addContactRelationship(relEntityId, "company", selected.id);
+      } else {
+        // Job-to-company link is the job's company_id field.
+        await api.updateJob(relEntityId, { company_id: selected.id });
+      }
+      setRelEntityId("");
+      loadNotes(selected.id);
+      load();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to add relationship");
+    } finally {
+      setRelBusy(false);
+    }
+  };
+
+  const handleRemoveRelationship = async (type: "contact" | "job", id: string) => {
+    if (!selected) return;
+    if (!confirm(`Remove this ${type} from the company?`)) return;
+    setRelBusy(true);
+    setError("");
+    try {
+      if (type === "contact") {
+        await api.removeContactRelationship(id, "company", selected.id);
+      } else {
+        await api.updateJob(id, { company_id: null });
+      }
+      loadNotes(selected.id);
+      load();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to remove relationship");
+    } finally {
+      setRelBusy(false);
     }
   };
 
@@ -600,86 +664,119 @@ function CompaniesContent() {
                     )}
                   </div>
                 ) : activeTab === "relationships" ? (
-                  <div className="space-y-2 max-h-[420px] overflow-y-auto">
-                    {companyRelItems.length === 0 ? (
-                      <p className="text-sm text-gray-400 dark:text-[#5a5a64] py-6 text-center">
-                        No relationships yet. Link contacts from the Contacts page, add jobs, or add notes.
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={relType}
+                        onChange={(e) => { setRelType(e.target.value as "contact" | "job"); setRelEntityId(""); }}
+                        className="bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white outline-none"
+                      >
+                        <option value="contact">Contact</option>
+                        <option value="job">Job</option>
+                      </select>
+                      <select
+                        value={relEntityId}
+                        onChange={(e) => setRelEntityId(e.target.value)}
+                        className="flex-1 min-w-[180px] bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white outline-none"
+                      >
+                        <option value="">Select {relType}...</option>
+                        {availableRelOptions.map((o) => (
+                          <option key={o.id} value={o.id}>{o.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={handleAddRelationship}
+                        disabled={relBusy || !relEntityId}
+                        className="flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add
+                      </button>
+                    </div>
+                    {availableRelOptions.length === 0 && (
+                      <p className="text-xs text-gray-400 dark:text-[#5a5a64]">
+                        {relType === "contact"
+                          ? "No more contacts to link."
+                          : "No jobs to link to this company."}
                       </p>
-                    ) : (
-                      companyRelItems.map((item) => {
-                        if (item.type === "note") {
-                          return (
-                            <NoteCard
-                              key={item.key}
-                              text={item.note || ""}
-                              createdAt={item.created_at || undefined}
-                              tags={item.tags || []}
-                              icon={<StickyNote className="w-4 h-4" />}
-                              footerExtra={
-                                item.source === "contact" ? (
-                                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">
-                                    via {item.contact_name || "contact"}
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">Company note</span>
-                                )
-                              }
-                              onOpen={() =>
-                                item.source === "contact" && item.contact_id
-                                  ? router.push(`/contacts?contact_id=${item.contact_id}`)
-                                  : setActiveTab("notes")
-                              }
-                              onMore={(t) => setNoteModal({ title: "Note", text: t })}
-                            />
-                          );
-                        }
-                        return item.href ? (
-                          <Link
-                            key={item.key}
-                            href={item.href}
-                            className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3 hover:border-indigo-500/40 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
-                          >
-                            <div
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                item.type === "contact"
-                                  ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
-                                  : "bg-blue-500/15 text-blue-600 dark:text-blue-300"
-                              }`}
-                            >
-                              {item.type === "contact" ? <ContactIcon className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
-                              <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
-                            </div>
-                            {item.type === "job" && item.status && (
-                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_BADGE[item.status] || STATUS_BADGE.saved}`}>
-                                {STATUS_LABEL[item.status] || "Saved"}
-                              </span>
-                            )}
-                          </Link>
-                        ) : (
-                          <div
-                            key={item.key}
-                            className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3"
-                          >
-                            <div
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                item.type === "contact"
-                                  ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
-                                  : "bg-blue-500/15 text-blue-600 dark:text-blue-300"
-                              }`}
-                            >
-                              {item.type === "contact" ? <ContactIcon className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
-                              <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
-                            </div>
-                          </div>
-                        );
-                      })
                     )}
+
+                    <div className="space-y-2 max-h-[380px] overflow-y-auto">
+                      {companyRelItems.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-[#5a5a64] py-6 text-center">
+                          No relationships yet. Link a contact or job above, or add notes.
+                        </p>
+                      ) : (
+                        companyRelItems.map((item) => {
+                          if (item.type === "note") {
+                            return (
+                              <NoteCard
+                                key={item.key}
+                                text={item.note || ""}
+                                createdAt={item.created_at || undefined}
+                                tags={item.tags || []}
+                                icon={<StickyNote className="w-4 h-4" />}
+                                footerExtra={
+                                  item.source === "contact" ? (
+                                    <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">
+                                      via {item.contact_name || "contact"}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">Company note</span>
+                                  )
+                                }
+                                onOpen={() =>
+                                  item.source === "contact" && item.contact_id
+                                    ? router.push(`/contacts?contact_id=${item.contact_id}`)
+                                    : setActiveTab("notes")
+                                }
+                                onMore={(t) => setNoteModal({ title: "Note", text: t })}
+                              />
+                            );
+                          }
+                          return (
+                            <div
+                              key={item.key}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-3 py-2.5"
+                            >
+                              <Link
+                                href={item.href || "#"}
+                                className="flex items-center gap-2.5 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+                              >
+                                <div
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                    item.type === "contact"
+                                      ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+                                      : "bg-blue-500/15 text-blue-600 dark:text-blue-300"
+                                  }`}
+                                >
+                                  {item.type === "contact" ? <ContactIcon className="w-3.5 h-3.5" /> : <Briefcase className="w-3.5 h-3.5" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+                                  <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
+                                </div>
+                              </Link>
+                              {item.type === "job" && item.status && (
+                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_BADGE[item.status] || STATUS_BADGE.saved}`}>
+                                  {STATUS_LABEL[item.status] || "Saved"}
+                                </span>
+                              )}
+                              {(item.type === "contact" ? item.contact_id : item.job_id) && (
+                                <button
+                                  onClick={() => handleRemoveRelationship(item.type as "contact" | "job", (item.type === "contact" ? item.contact_id : item.job_id)!)}
+                                  title="Remove"
+                                  disabled={relBusy}
+                                  className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-red-500 hover:bg-red-500/10 shrink-0 disabled:opacity-50 transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">

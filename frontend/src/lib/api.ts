@@ -395,6 +395,27 @@ export const api = {
     const { data } = await client.delete(`/api/applications/${id}`);
     return data;
   },
+
+  // Job relationships
+  addJobRelationship: async (jobId: string, entityType: string, entityId: string) => {
+    const { data } = await client.post(`/api/jobs/${jobId}/relationships`, {
+      entity_type: entityType,
+      entity_id: entityId,
+    });
+    return data;
+  },
+  removeJobRelationship: async (jobId: string, entityType: string, entityId: string) => {
+    const { data } = await client.delete(`/api/jobs/${jobId}/relationships/${entityType}/${entityId}`);
+    return data;
+  },
+
+  // Activity log
+  getActivity: async (limit?: number) => {
+    const { data } = await client.get("/api/activity/", {
+      params: limit ? { limit } : {},
+    });
+    return data;
+  },
 };
 
 

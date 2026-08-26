@@ -7,6 +7,7 @@ from app.schemas.schemas import ResumeResponse
 from app.services.resume_service import extract_text_from_pdf, save_upload
 from app.services.ai_service import extract_skills_from_resume, track_usage
 from app.core.auth import get_current_user
+from app.core.activity import log_activity
 from app.core.config import settings
 from app.core.rate_limit import ai_quota_limit
 from typing import List
@@ -63,6 +64,7 @@ async def upload_resume(
         version=(latest_version or 0) + 1,
     )
     db.add(resume)
+    log_activity(db, user.id, "created", "resume", resume.id, file.filename)
     db.commit()
     db.refresh(resume)
     return resume
@@ -113,6 +115,7 @@ def set_active_resume(resume_id: str, user: User = Depends(get_current_user), db
     # Deactivate all, then activate this one
     db.query(Resume).filter(Resume.user_id == user.id).update({"is_active": False})
     resume.is_active = True
+    log_activity(db, user.id, "updated", "resume", resume.id, resume.filename, details="set as active")
     db.commit()
     db.refresh(resume)
     return resume
@@ -131,6 +134,7 @@ def delete_resume(resume_id: str, user: User = Depends(get_current_user), db: Se
     if os.path.exists(resume.file_path):
         os.remove(resume.file_path)
 
+    log_activity(db, user.id, "deleted", "resume", resume.id, resume.filename)
     db.delete(resume)
     db.commit()
     return {"message": "Resume deleted"}

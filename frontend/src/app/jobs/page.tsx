@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { type Job } from "@/lib/types";
-import { Loader2, Plus, Trash2, Pencil, Search, X, FileText, Eye, Contact as ContactIcon, StickyNote } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Search, X, FileText, Eye, Contact as ContactIcon, StickyNote, Building2, Briefcase } from "lucide-react";
 import { JobModal } from "@/components/JobModal";
 import { JobDescriptionModal } from "@/components/JobDescriptionModal";
 import { PageShell } from "@/components/PageShell";
@@ -107,9 +107,15 @@ function JobsContent() {
   const [activeTab, setActiveTab] = useState<"notes" | "resumes" | "relationships">("notes");
   const [jobNotes, setJobNotes] = useState<JobNote[]>([]);
   const [jobRelationships, setJobRelationships] = useState<{
+    company: { id: string; name: string } | null;
     contacts: { id: string; name: string; email?: string | null; phone?: string | null }[];
+    related_jobs: { id: string; title: string; company: string }[];
     notes: { id: string; note: string; created_at?: string | null; source: string; contact_id?: string | null; contact_name?: string | null; tags?: NoteTag[] }[];
-  }>({ contacts: [], notes: [] });
+  }>({ company: null, contacts: [], related_jobs: [], notes: [] });
+  const [contacts, setContacts] = useState<{ id: string; name: string; email?: string | null; phone?: string | null }[]>([]);
+  const [relType, setRelType] = useState<"contact" | "company" | "job">("contact");
+  const [relEntityId, setRelEntityId] = useState("");
+  const [relBusy, setRelBusy] = useState(false);
   const [noteModal, setNoteModal] = useState<{ title: string; text: string } | null>(null);
   const [noteText, setNoteText] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
@@ -158,6 +164,10 @@ function JobsContent() {
     api
       .listCompanies()
       .then(setCompanies)
+      .catch(console.error);
+    api
+      .listContacts()
+      .then(setContacts)
       .catch(console.error);
     if (searchParams.get("new") === "true") {
       setModalOpen(true);
@@ -318,7 +328,7 @@ function JobsContent() {
         api.getJobRelationships(job.id),
       ]);
       setJobNotes(notes || []);
-      setJobRelationships(relationships || { contacts: [], notes: [] });
+      setJobRelationships(relationships || { company: null, contacts: [], related_jobs: [], notes: [] });
       const map: Record<string, Analysis> = {};
       (analyses || []).forEach((a: Analysis) => {
         map[a.resume_id] = a;
@@ -447,6 +457,46 @@ function JobsContent() {
     }
   };
 
+  const reloadJobRelationships = async () => {
+    if (!selectedJob) return;
+    try {
+      const rels = await api.getJobRelationships(selectedJob.id);
+      setJobRelationships(rels || { company: null, contacts: [], related_jobs: [], notes: [] });
+    } catch (e) {
+      console.error("Failed to reload job relationships", e);
+    }
+  };
+
+  const handleAddRelationship = async () => {
+    if (!selectedJob || !relEntityId) return;
+    setRelBusy(true);
+    try {
+      await api.addJobRelationship(selectedJob.id, relType, relEntityId);
+      setRelEntityId("");
+      await reloadJobRelationships();
+      loadAll();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Failed to add relationship");
+    } finally {
+      setRelBusy(false);
+    }
+  };
+
+  const handleRemoveRelationship = async (type: "contact" | "company" | "job", id: string) => {
+    if (!selectedJob) return;
+    if (!confirm(`Remove this ${type} from the job?`)) return;
+    setRelBusy(true);
+    try {
+      await api.removeJobRelationship(selectedJob.id, type, id);
+      await reloadJobRelationships();
+      loadAll();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Failed to remove relationship");
+    } finally {
+      setRelBusy(false);
+    }
+  };
+
   const scoreColor = (score: number) =>
     score >= 75
       ? "text-green-600 dark:text-green-400 bg-green-500/15"
@@ -471,17 +521,29 @@ function JobsContent() {
   const jobRelItems = useMemo(() => {
     const items: {
       key: string;
-      type: "contact" | "note";
+      type: "company" | "contact" | "job" | "note";
       href?: string;
       name: string;
       sub: string;
       note?: string;
       created_at?: string | null;
       source?: string;
+      company_id?: string | null;
       contact_id?: string | null;
       contact_name?: string | null;
+      job_id?: string | null;
       tags?: NoteTag[];
     }[] = [];
+    if (jobRelationships.company) {
+      items.push({
+        key: `company-${jobRelationships.company.id}`,
+        type: "company",
+        href: `/companies?company_id=${jobRelationships.company.id}`,
+        name: jobRelationships.company.name,
+        sub: "Company",
+        company_id: jobRelationships.company.id,
+      });
+    }
     jobRelationships.contacts.forEach((c) =>
       items.push({
         key: `contact-${c.id}`,
@@ -489,6 +551,17 @@ function JobsContent() {
         href: `/contacts?contact_id=${c.id}`,
         name: c.name,
         sub: [c.email, c.phone].filter(Boolean).join(" · ") || "Contact",
+        contact_id: c.id,
+      })
+    );
+    jobRelationships.related_jobs.forEach((j) =>
+      items.push({
+        key: `job-${j.id}`,
+        type: "job",
+        href: `/jobs?job_id=${j.id}`,
+        name: j.title,
+        sub: j.company,
+        job_id: j.id,
       })
     );
     jobRelationships.notes.forEach((n) =>
@@ -755,7 +828,7 @@ function JobsContent() {
                       : "text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
-                  Relationships <span className="text-xs text-gray-400 dark:text-[#6b6b72]">{jobRelationships.contacts.length + jobRelationships.notes.length}</span>
+                  Relationships <span className="text-xs text-gray-400 dark:text-[#6b6b72]">{jobRelationships.contacts.length + jobRelationships.related_jobs.length + (jobRelationships.company ? 1 : 0) + jobRelationships.notes.length}</span>
                 </button>
               </div>
 
@@ -803,69 +876,136 @@ function JobsContent() {
                   )}
                 </div>
               ) : activeTab === "relationships" ? (
-                <div className="space-y-2 max-h-[420px] overflow-y-auto">
-                  {jobRelItems.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-[#8b8b96] py-6 text-center">
-                      No relationships yet. Link contacts from the Contacts page or add notes.
-                    </p>
-                  ) : (
-                    jobRelItems.map((item) => {
-                      if (item.type === "note") {
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={relType}
+                      onChange={(e) => { setRelType(e.target.value as "contact" | "company" | "job"); setRelEntityId(""); }}
+                      className="bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white outline-none"
+                    >
+                      <option value="contact">Contact</option>
+                      <option value="company">Company</option>
+                      <option value="job">Job</option>
+                    </select>
+                    <select
+                      value={relEntityId}
+                      onChange={(e) => setRelEntityId(e.target.value)}
+                      className="flex-1 min-w-[180px] bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white outline-none"
+                    >
+                      <option value="">Select {relType}...</option>
+                      {relType === "contact" && contacts
+                        .filter((c) => !jobRelationships.contacts.some((lc) => lc.id === c.id))
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                            {c.email ? ` — ${c.email}` : ""}
+                          </option>
+                        ))}
+                      {relType === "company" && companies
+                        .filter((c) => !jobRelationships.company || jobRelationships.company.id !== c.id)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      {relType === "job" && jobs
+                        .filter((j) => j.id !== selectedJob?.id && !jobRelationships.related_jobs.some((lj) => lj.id === j.id))
+                        .map((j) => (
+                          <option key={j.id} value={j.id}>{j.title} · {j.company}</option>
+                        ))}
+                    </select>
+                    <button
+                      onClick={handleAddRelationship}
+                      disabled={relBusy || !relEntityId}
+                      className="flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-[380px] overflow-y-auto">
+                    {jobRelItems.length === 0 ? (
+                      <p className="text-sm text-gray-500 dark:text-[#8b8b96] py-6 text-center">
+                        No relationships yet. Link a contact, company, or job above, or add notes.
+                      </p>
+                    ) : (
+                      jobRelItems.map((item) => {
+                        if (item.type === "note") {
+                          return (
+                            <NoteCard
+                              key={item.key}
+                              text={item.note || ""}
+                              createdAt={item.created_at || undefined}
+                              tags={item.tags || []}
+                              icon={<StickyNote className="w-4 h-4" />}
+                              footerExtra={
+                                item.source === "contact" ? (
+                                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">
+                                    via {item.contact_name || "contact"}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">Job note</span>
+                                )
+                              }
+                              onOpen={() =>
+                                item.source === "contact" && item.contact_id
+                                  ? router.push(`/contacts?contact_id=${item.contact_id}`)
+                                  : setActiveTab("notes")
+                              }
+                              onMore={(t) => setNoteModal({ title: "Note", text: t })}
+                            />
+                          );
+                        }
+                        const removableId = item.type === "contact"
+                          ? item.contact_id
+                          : item.type === "company"
+                          ? item.company_id
+                          : item.job_id;
                         return (
-                          <NoteCard
+                          <div
                             key={item.key}
-                            text={item.note || ""}
-                            createdAt={item.created_at || undefined}
-                            tags={item.tags || []}
-                            icon={<StickyNote className="w-4 h-4" />}
-                            footerExtra={
-                              item.source === "contact" ? (
-                                <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">
-                                  via {item.contact_name || "contact"}
-                                </span>
-                              ) : (
-                                <span className="text-[11px] text-gray-400 dark:text-[#5a5a64]">Job note</span>
-                              )
-                            }
-                            onOpen={() =>
-                              item.source === "contact" && item.contact_id
-                                ? router.push(`/contacts?contact_id=${item.contact_id}`)
-                                : setActiveTab("notes")
-                            }
-                            onMore={(t) => setNoteModal({ title: "Note", text: t })}
-                          />
+                            className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-3 py-2.5"
+                          >
+                            <Link
+                              href={item.href || "#"}
+                              className="flex items-center gap-2.5 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+                            >
+                              <div
+                                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                  item.type === "company"
+                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
+                                    : item.type === "job"
+                                    ? "bg-blue-500/15 text-blue-600 dark:text-blue-300"
+                                    : "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+                                }`}
+                              >
+                                {item.type === "company" ? (
+                                  <Building2 className="w-3.5 h-3.5" />
+                                ) : item.type === "job" ? (
+                                  <Briefcase className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ContactIcon className="w-3.5 h-3.5" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
+                                <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
+                              </div>
+                            </Link>
+                            {removableId && (
+                              <button
+                                onClick={() => handleRemoveRelationship(item.type as "contact" | "company" | "job", removableId!)}
+                                title="Remove from job"
+                                disabled={relBusy}
+                                className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-red-500 hover:bg-red-500/10 shrink-0 disabled:opacity-50 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         );
-                      }
-                      return item.href ? (
-                        <Link
-                          key={item.key}
-                          href={item.href}
-                          className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3 hover:border-indigo-500/40 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
-                            <ContactIcon className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
-                            <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
-                          </div>
-                        </Link>
-                      ) : (
-                        <div
-                          key={item.key}
-                          className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-[#0d0d14] px-4 py-3"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
-                            <ContactIcon className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.name}</p>
-                            <p className="text-xs text-gray-400 dark:text-[#5a5a64] truncate">{item.sub}</p>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                      })
+                    )}
+                  </div>
                 </div>
               ) : resumes.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-[#0d0d14] p-10 text-center">

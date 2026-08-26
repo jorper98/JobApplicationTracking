@@ -4,6 +4,7 @@ from app.db.database import get_db
 from app.models.models import Application, Job, JobAnalysis, Resume, User, ApplicationStatus
 from app.schemas.schemas import ApplicationCreate, ApplicationUpdate, ApplicationResponse
 from app.core.auth import get_current_user
+from app.core.activity import log_activity
 from typing import List
 from datetime import datetime, timezone
 
@@ -85,6 +86,8 @@ def create_application(data: ApplicationCreate, user: User = Depends(get_current
         return existing
 
     application = get_or_create_application(db, data.job_id, user.id, data.status, data.notes)
+    status_value = data.status.value if data.status else None
+    log_activity(db, user.id, "created", "application", application.id, job.title, details=f"status: {status_value}")
     db.commit()
     db.refresh(application)
     return application
@@ -143,6 +146,8 @@ def update_application(app_id: str, data: ApplicationUpdate, user: User = Depend
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
 
+    job_title = app.job.title if app.job else "Application"
+    old_status = app.status.value if app.status else None
     if data.status is not None:
         app.status = data.status
     if data.notes is not None:
@@ -150,6 +155,10 @@ def update_application(app_id: str, data: ApplicationUpdate, user: User = Depend
     if data.follow_up_date is not None:
         app.follow_up_date = data.follow_up_date
 
+    details = None
+    if data.status is not None and old_status and old_status != data.status.value:
+        details = f"{old_status} -> {data.status.value}"
+    log_activity(db, user.id, "updated", "application", app.id, job_title, details=details)
     db.commit()
     db.refresh(app)
     return app
@@ -161,6 +170,8 @@ def delete_application(app_id: str, user: User = Depends(get_current_user), db: 
     app = db.query(Application).filter(Application.id == app_id, Application.user_id == user.id).first()
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
+    job_title = app.job.title if app.job else "Application"
+    log_activity(db, user.id, "deleted", "application", app.id, job_title)
     db.delete(app)
     db.commit()
     return {"message": "Application deleted"}

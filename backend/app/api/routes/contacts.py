@@ -14,6 +14,7 @@ from app.schemas.schemas import (
     ContactNoteTagResponse,
 )
 from app.core.auth import get_current_user
+from app.core.activity import log_activity
 from typing import List
 
 router = APIRouter()
@@ -135,6 +136,7 @@ def create_contact(
         phone=(contact_data.phone or "").strip() or None,
     )
     db.add(contact)
+    log_activity(db, user.id, "created", "contact", contact.id, contact.name)
     db.commit()
     db.refresh(contact)
     return _contact_to_response(db, contact)
@@ -156,6 +158,7 @@ def update_contact(
         if field in ("email", "phone") and value is not None:
             value = value.strip() or None
         setattr(contact, field, value)
+    log_activity(db, user.id, "updated", "contact", contact.id, contact.name)
     db.commit()
     db.refresh(contact)
     return _contact_to_response(db, contact)
@@ -169,6 +172,7 @@ def delete_contact(contact_id: str, user: User = Depends(get_current_user), db: 
     db.query(ContactContact).filter(ContactContact.related_contact_id == contact_id).delete(
         synchronize_session=False
     )
+    log_activity(db, user.id, "deleted", "contact", contact.id, contact.name)
     db.delete(contact)
     db.commit()
     return {"message": "Contact deleted"}
@@ -205,6 +209,8 @@ def add_relationship(
         ).first()
         if not exists:
             db.add(ContactCompany(contact_id=contact_id, company_id=entity_id))
+            company = db.query(Company).filter(Company.id == entity_id).first()
+            log_activity(db, user.id, "updated", "contact", contact.id, contact.name, details=f"linked company: {company.name if company else entity_id}")
             db.commit()
     elif entity_type == "job":
         _get_owned_job(db, user, entity_id)
@@ -214,6 +220,8 @@ def add_relationship(
         ).first()
         if not exists:
             db.add(ContactJob(contact_id=contact_id, job_id=entity_id))
+            job = db.query(Job).filter(Job.id == entity_id).first()
+            log_activity(db, user.id, "updated", "contact", contact.id, contact.name, details=f"linked job: {job.title if job else entity_id}")
             db.commit()
     elif entity_type == "contact":
         if entity_id == contact_id:
@@ -227,6 +235,8 @@ def add_relationship(
             # Store both directions so the relationship is mutual.
             db.add(ContactContact(contact_id=contact_id, related_contact_id=entity_id))
             db.add(ContactContact(contact_id=entity_id, related_contact_id=contact_id))
+            other = db.query(Contact).filter(Contact.id == entity_id).first()
+            log_activity(db, user.id, "updated", "contact", contact.id, contact.name, details=f"linked contact: {other.name if other else entity_id}")
             db.commit()
     else:
         raise HTTPException(status_code=400, detail="Invalid entity_type. Use: company, job, or contact")
@@ -242,7 +252,7 @@ def remove_relationship(
     db: Session = Depends(get_db),
 ):
     """Remove a relationship from a contact."""
-    _get_owned_contact(db, user, contact_id)
+    contact = _get_owned_contact(db, user, contact_id)
     if entity_type == "company":
         db.query(ContactCompany).filter(
             ContactCompany.contact_id == contact_id,
@@ -265,6 +275,7 @@ def remove_relationship(
         ).delete()
     else:
         raise HTTPException(status_code=400, detail="Invalid entity_type")
+    log_activity(db, user.id, "updated", "contact", contact.id, contact.name, details=f"unlinked {entity_type}: {entity_id}")
     db.commit()
     return {"message": "Relationship removed"}
 
@@ -341,6 +352,7 @@ def create_contact_note(
             entity_type=tag["entity_type"],
             entity_id=tag["entity_id"],
         ))
+    log_activity(db, user.id, "created", "note", note.id, f"Note on {contact.name}", details=note_data.note.strip()[:120])
     db.commit()
     db.refresh(note)
     tags = db.query(ContactNoteTag).filter(ContactNoteTag.note_id == note.id).all()
@@ -382,6 +394,7 @@ def update_contact_note(
                 entity_type=tag["entity_type"],
                 entity_id=tag["entity_id"],
             ))
+    log_activity(db, user.id, "updated", "note", note.id, f"Note on {contact.name}")
     db.commit()
     db.refresh(note)
     tags = db.query(ContactNoteTag).filter(ContactNoteTag.note_id == note.id).all()
@@ -410,6 +423,7 @@ def delete_contact_note(
     )
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    log_activity(db, user.id, "deleted", "note", note.id, f"Note on {contact.name}")
     db.delete(note)
     db.commit()
     return {"message": "Note deleted"}

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text, func
 from app.core.config import settings
-from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies, contacts
+from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies, contacts, activity
 from app.db.database import engine, Base
 from app.models import models  # ensures all models are registered with Base
 
@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.2.2",
+    version="1.2.3",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -332,6 +332,7 @@ app.include_router(companies.router, prefix="/api/companies", tags=["Companies"]
 app.include_router(contacts.router, prefix="/api/contacts", tags=["Contacts"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(data.router, prefix="/api/data", tags=["Data"])
+app.include_router(activity.router, prefix="/api/activity", tags=["Activity"])
 
 if settings.DEBUG:
     from app.api.routes import debug

@@ -285,17 +285,17 @@ function ContactsContent() {
     }
   };
 
-  const addPendingTag = () => {
-    if (!tagEntityId) return;
-    if (pendingTags.some((t) => t.entity_type === tagType && t.entity_id === tagEntityId)) return;
-    setPendingTags([...pendingTags, { entity_type: tagType, entity_id: tagEntityId }]);
+  const addPendingTag = (entityId: string) => {
+    if (!entityId) return;
+    if (pendingTags.some((t) => t.entity_type === tagType && t.entity_id === entityId)) return;
+    setPendingTags([...pendingTags, { entity_type: tagType, entity_id: entityId }]);
     setTagEntityId("");
   };
 
-  const addEditTag = () => {
-    if (!editTagEntityId) return;
-    if (editNoteTags.some((t) => t.entity_type === editTagType && t.entity_id === editTagEntityId)) return;
-    setEditNoteTags([...editNoteTags, { entity_type: editTagType, entity_id: editTagEntityId }]);
+  const addEditTag = (entityId: string) => {
+    if (!entityId) return;
+    if (editNoteTags.some((t) => t.entity_type === editTagType && t.entity_id === entityId)) return;
+    setEditNoteTags([...editNoteTags, { entity_type: editTagType, entity_id: entityId }]);
     setEditTagEntityId("");
   };
 
@@ -559,13 +559,14 @@ function ContactsContent() {
                           <option value="job">Job</option>
                           <option value="contact">Contact</option>
                         </select>
-                        <select value={tagEntityId} onChange={(e) => setTagEntityId(e.target.value)} className="flex-1 min-w-[140px] bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white outline-none">
+                        <select value={tagEntityId} onChange={(e) => addPendingTag(e.target.value)} className="flex-1 min-w-[140px] bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white outline-none">
                           <option value="">Select...</option>
-                          {availableTagOptions.map((o) => (
+                          {availableTagOptions
+                            .filter((o) => !pendingTags.some((t) => t.entity_type === tagType && t.entity_id === o.id))
+                            .map((o) => (
                             <option key={o.id} value={o.id}>{o.name}</option>
                           ))}
                         </select>
-                        <button onClick={addPendingTag} disabled={!tagEntityId} className="text-xs bg-gray-100 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.08] px-2.5 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/[0.1] disabled:opacity-50">Add tag</button>
                       </div>
                       {pendingTags.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
@@ -604,13 +605,14 @@ function ContactsContent() {
                                   <option value="job">Job</option>
                                   <option value="contact">Contact</option>
                                 </select>
-                                <select value={editTagEntityId} onChange={(e) => setEditTagEntityId(e.target.value)} className="flex-1 min-w-[140px] bg-white dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white outline-none">
+                                <select value={editTagEntityId} onChange={(e) => addEditTag(e.target.value)} className="flex-1 min-w-[140px] bg-white dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-gray-900 dark:text-white outline-none">
                                   <option value="">Select...</option>
-                                  {availableEditTagOptions.map((o) => (
+                                  {availableEditTagOptions
+                                    .filter((o) => !editNoteTags.some((t) => t.entity_type === editTagType && t.entity_id === o.id))
+                                    .map((o) => (
                                     <option key={o.id} value={o.id}>{o.name}</option>
                                   ))}
                                 </select>
-                                <button onClick={addEditTag} disabled={!editTagEntityId} className="text-xs bg-gray-100 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.08] px-2.5 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/[0.1] disabled:opacity-50">Add tag</button>
                               </div>
                               {editNoteTags.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5">
