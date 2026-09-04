@@ -53,6 +53,7 @@ class JobCreate(BaseModel):
     location: Optional[str] = None
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
+    status: Optional[ApplicationStatus] = None
 
 
 class JobUpdate(BaseModel):
@@ -64,6 +65,8 @@ class JobUpdate(BaseModel):
     location: Optional[str] = None
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
+    extracted_skills: Optional[List[str]] = None
+    status: Optional[ApplicationStatus] = None
     created_at: Optional[datetime] = None
 
 

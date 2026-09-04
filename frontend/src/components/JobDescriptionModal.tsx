@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { X, ExternalLink, ArrowRight } from "lucide-react";
+import { X, ExternalLink, ArrowRight, Pencil } from "lucide-react";
 
 interface JobDescriptionModalProps {
   open: boolean;
   onClose: () => void;
+  onEdit?: () => void;
   jobId?: string;
   title: string;
   company?: string;
@@ -13,7 +14,7 @@ interface JobDescriptionModalProps {
   url?: string;
 }
 
-export function JobDescriptionModal({ open, onClose, jobId, title, company, description, url }: JobDescriptionModalProps) {
+export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, company, description, url }: JobDescriptionModalProps) {
   if (!open) return null;
 
   return (
@@ -25,12 +26,23 @@ export function JobDescriptionModal({ open, onClose, jobId, title, company, desc
             <h3 className="font-semibold text-gray-900 dark:text-white truncate">{title}</h3>
             {company && <p className="text-sm text-gray-500 dark:text-[#8b8b96] truncate">{company}</p>}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                title="Edit job"
+                className="p-1.5 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg text-gray-500 dark:text-[#8b8b96] hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="px-6 py-5 overflow-y-auto flex-1">

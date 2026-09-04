@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.2.4
+
+### Features
+
+- Jobs page: after adding a job, the new record is selected and pinned at
+  the top of the list so it lands in the detail panel immediately
+- Edit Job modal: assign the application status (Saved, Applied, Interview,
+  Offer, Rejected, Ghosted, Not Pursued) without leaving the jobs page; the
+  tracker stays in sync and the status change is recorded in the activity log
+- Edit Job modal: add or remove tags on a job (saved to the job's skill
+  tags, which feed the All Tags filter on the Jobs page)
+
+### Dev tooling
+
+- Added `recompile.ps1`: tears down the dev containers, rebuilds with
+  `docker compose up --build --detach`, and tails the logs of the first
+  container for a one-command dev rebuild cycle
+
+### Version bump
+
+- Version bumped to 1.2.4
+
 ## v1.2.3
 
 ### Features

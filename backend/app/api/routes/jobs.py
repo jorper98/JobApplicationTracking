@@ -101,7 +101,7 @@ def create_job(
     db.flush()
     # Track the new job in the SAME transaction: a failure here can never
     # leave a job committed without its tracker entry.
-    get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
+    get_or_create_application(db, job.id, user.id, job_data.status or ApplicationStatus.SAVED)
     log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
@@ -145,6 +145,18 @@ def update_job(job_id: str, job_data: JobUpdate, user: User = Depends(get_curren
     for field, value in update_data.items():
         # Ignore explicit nulls for required fields (avoids NOT NULL constraint errors)
         if value is None and field in ("title", "company"):
+            continue
+        if field == "status":
+            # Status lives on the tracker entry, not the job row.
+            if value is not None:
+                app = get_or_create_application(db, job.id, user.id, value)
+                if app.status != value:
+                    old_status = app.status.value if app.status else None
+                    app.status = value
+                    log_activity(
+                        db, user.id, "updated", "application", app.id, job.title,
+                        details=(f"{old_status} -> {value.value}" if old_status else f"status: {value.value}"),
+                    )
             continue
         if field == "company_id":
             if value is None:

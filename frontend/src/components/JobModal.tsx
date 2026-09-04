@@ -12,6 +12,7 @@ interface JobModalProps {
   job?: Job;
   onSave: (job: Job) => void;
   initialCompany?: string;
+  initialStatus?: string;
 }
 
 interface Company {
@@ -23,7 +24,17 @@ interface Company {
 
 type ModalMode = "manual" | "url" | "paste";
 
-export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobModalProps) {
+const STATUS_OPTIONS = [
+  { key: "saved", label: "Saved" },
+  { key: "applied", label: "Applied" },
+  { key: "interview", label: "Interview" },
+  { key: "offer", label: "Offer" },
+  { key: "rejected", label: "Rejected" },
+  { key: "ghosted", label: "Ghosted" },
+  { key: "not_pursued", label: "Not Pursued" },
+];
+
+export function JobModal({ isOpen, onClose, job, onSave, initialCompany, initialStatus }: JobModalProps) {
   const [mode, setMode] = useState<ModalMode>("manual");
   const [form, setForm] = useState<{ title: string; company: string; description: string; url: string; location: string; createdAt: string }>({
     title: "",
@@ -33,6 +44,9 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
     location: "",
     createdAt: "",
   });
+  const [status, setStatus] = useState("saved");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [pasteInput, setPasteInput] = useState("");
   const [scraping, setScraping] = useState(false);
@@ -66,6 +80,9 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
           location: job.location || "",
           createdAt: job.created_at ? new Date(job.created_at).toISOString().slice(0,10) : "",
         });
+        setStatus(initialStatus || "saved");
+        setTags((job.extracted_skills || []).filter((t) => t.trim() !== ""));
+        setTagInput("");
         if (job.company_id) {
           api
             .getCompany(job.company_id)
@@ -78,6 +95,9 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
         setMode("manual");
       } else {
         setForm({ title: "", company: initialCompany || "", description: "", url: "", location: "", createdAt: "" });
+        setStatus("saved");
+        setTags([]);
+        setTagInput("");
         setUrlInput("");
         setPasteInput("");
         setPreview(null);
@@ -86,7 +106,7 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
         setError("");
       }
     }
-  }, [isOpen, job, initialCompany]);
+  }, [isOpen, job, initialCompany, initialStatus]);
 
   const handleCompanyChange = (value: string) => {
     setForm({ ...form, company: value });
@@ -122,6 +142,14 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
     setCompanyNotes(company.notes || "");
     setCompanySuggestions([]);
     setSuggestionsOpen(false);
+  };
+
+  const addTag = (raw: string) => {
+    const value = raw.trim();
+    if (!value) return;
+    const parts = value.split(",").map((t) => t.trim()).filter((t) => t && !tags.includes(t));
+    if (parts.length > 0) setTags((prev) => [...prev, ...parts]);
+    setTagInput("");
   };
 
   const resolveCompany = async (): Promise<string | null> => {
@@ -186,7 +214,12 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
       const payload = { ...form, company_id: companyId ?? undefined };
       let savedJob;
       if (job) {
-        savedJob = await api.updateJob(job.id, { ...payload, created_at: form.createdAt ? new Date(form.createdAt).toISOString() : null });
+        savedJob = await api.updateJob(job.id, {
+          ...payload,
+          created_at: form.createdAt ? new Date(form.createdAt).toISOString() : null,
+          status,
+          extracted_skills: tags,
+        });
       } else {
         // The backend saves the job AND its tracker entry atomically.
         savedJob = await api.createJob(payload);
@@ -230,7 +263,7 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-[#0b0b11] border-b border-gray-200 dark:border-white/[0.08] px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             {job ? "Edit Job" : "Add Job"}
@@ -364,6 +397,63 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany }: JobMo
                 <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Date added</label>
                 <input type="date" value={form.createdAt} onChange={(e) => setForm({ ...form, createdAt: e.target.value })} className={inputClass} />
               </div>
+              {job && (
+                <>
+                  <div>
+                    <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Status</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      className={inputClass + " cursor-pointer"}
+                    >
+                      {STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.key} value={opt.key}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Tags</label>
+                    {tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 text-[11px] bg-blue-500/15 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full"
+                          >
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() => setTags(tags.filter((t) => t !== tag))}
+                              className="text-blue-500 dark:text-blue-400 hover:text-red-500 transition-colors"
+                              title="Remove tag"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === ",") {
+                          e.preventDefault();
+                          addTag(tagInput);
+                        } else if (e.key === "Backspace" && !tagInput && tags.length > 0) {
+                          setTags(tags.slice(0, -1));
+                        }
+                      }}
+                      onBlur={() => addTag(tagInput)}
+                      placeholder="Type a tag and press Enter (e.g. remote, Python, senior)"
+                      className={inputClass}
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm text-gray-500 dark:text-[#8b8b96]">Job Description</label>

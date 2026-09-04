@@ -296,6 +296,8 @@ function JobsContent() {
       setJobs((prev) => prev.map((j) => (j.id === savedJob.id ? savedJob : j)));
     } else {
       setJobs((prev) => [savedJob, ...prev]);
+      setPinnedJobId(savedJob.id);
+      handleSelectJob(savedJob);
     }
     api
       .listCompanies()
@@ -334,7 +336,7 @@ function JobsContent() {
         map[a.resume_id] = a;
       });
       setAnalysesMap(map);
-      setActiveTab(Object.keys(map).length > 0 ? "resumes" : "notes");
+      setActiveTab("notes");
     } catch (e) {
       console.error("Failed to load job detail", e);
     } finally {
@@ -1408,11 +1410,19 @@ function JobsContent() {
         onClose={() => setModalOpen(false)}
         job={editingJob || undefined}
         onSave={handleModalSave}
+        initialStatus={editingJob ? statusMap[editingJob.id] || "saved" : undefined}
       />
 
       <JobDescriptionModal
         open={!!descJob}
         onClose={() => setDescJob(null)}
+        onEdit={() => {
+          if (descJob) {
+            const job = descJob;
+            setDescJob(null);
+            openEditModal(job);
+          }
+        }}
         jobId={descJob?.id}
         title={descJob?.title || ""}
         company={descJob?.company}
