@@ -41,7 +41,7 @@ export default function RegisterPage() {
             </div>
             <div className="flex flex-col leading-none">
               <span className="font-bold text-gray-900 dark:text-white">JobApplicationTracker</span>
-              <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.4</span>
+              <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.5</span>
             </div>
           </div>
 
@@ -75,7 +75,7 @@ export default function RegisterPage() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="font-bold text-gray-900 dark:text-white">JobApplicationTracker</span>
-            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.4</span>
+            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.5</span>
           </div>
         </div>
 

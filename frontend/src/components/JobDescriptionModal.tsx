@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { X, ExternalLink, ArrowRight, Pencil } from "lucide-react";
 
@@ -15,6 +16,17 @@ interface JobDescriptionModalProps {
 }
 
 export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, company, description, url }: JobDescriptionModalProps) {
+  // Lock page scrolling while the modal is open so the wheel only scrolls
+  // inside the modal, never the page behind it.
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -45,7 +57,7 @@ export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, compa
           </div>
         </div>
 
-        <div className="px-6 py-5 overflow-y-auto flex-1">
+        <div className="px-6 py-5 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           {description ? (
             <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap leading-relaxed">
               {description}

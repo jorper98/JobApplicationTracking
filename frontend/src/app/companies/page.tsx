@@ -14,6 +14,7 @@ interface Company {
   name: string;
   notes?: string | null;
   job_count?: number;
+  note_count?: number;
 }
 
 interface JobRow {
@@ -317,6 +318,9 @@ function CompaniesContent() {
       await api.createCompanyNote(selected.id, noteInput.trim());
       setNoteInput("");
       loadNotes(selected.id);
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === selected?.id ? { ...c, note_count: (c.note_count || 0) + 1 } : c))
+      );
       setMessage("Note added.");
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to add note");
@@ -358,6 +362,9 @@ function CompaniesContent() {
     try {
       await api.deleteCompanyNote(selected.id, note.id);
       loadNotes(selected.id);
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === selected?.id ? { ...c, note_count: Math.max(0, (c.note_count || 0) - 1) } : c))
+      );
       setMessage("Note deleted.");
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to delete note");
@@ -506,6 +513,14 @@ function CompaniesContent() {
                   </div>
                 </button>
                 <div className="flex items-center gap-1 shrink-0">
+                  {typeof company.note_count === "number" && company.note_count > 0 && (
+                    <span
+                      title={`${company.note_count} ${company.note_count === 1 ? "note" : "notes"}`}
+                      className="self-start mt-0.5 shrink-0 text-[10px] leading-none px-1.5 py-1 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8b8b96]"
+                    >
+                      {company.note_count}
+                    </span>
+                  )}
                   <button
                     onClick={() => startEdit(company)}
                     title="Edit"

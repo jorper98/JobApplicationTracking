@@ -35,6 +35,7 @@ class CompanyResponse(BaseModel):
     name: str
     notes: Optional[str] = None
     job_count: int = 0
+    note_count: int = 0
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -79,6 +80,7 @@ class JobResponse(BaseModel):
     url: Optional[str] = None
     location: Optional[str] = None
     extracted_skills: Optional[List[str]] = None
+    note_count: int = 0
     created_at: datetime
 
     class Config:
@@ -151,6 +153,7 @@ class ContactResponse(BaseModel):
     companies: List[ContactLinkResponse] = []
     jobs: List[ContactLinkResponse] = []
     contacts: List[ContactLinkResponse] = []
+    note_count: int = 0
     created_at: datetime
     updated_at: Optional[datetime] = None
 

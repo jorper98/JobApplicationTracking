@@ -7,6 +7,7 @@ export interface Job {
   url?: string;
   location?: string;
   extracted_skills?: string[];
+  note_count?: number;
   created_at?: string;
 }
 

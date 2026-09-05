@@ -30,6 +30,7 @@ interface ContactRecord {
   name: string;
   email?: string | null;
   phone?: string | null;
+  note_count?: number;
   companies: { id: string; name: string }[];
   jobs: { id: string; name: string }[];
   contacts: { id: string; name: string; email?: string | null }[];
@@ -309,6 +310,9 @@ function ContactsContent() {
       setNoteInput("");
       setPendingTags([]);
       loadNotes(selected.id);
+      setContacts((prev) =>
+        prev.map((c) => (c.id === selected?.id ? { ...c, note_count: (c.note_count || 0) + 1 } : c))
+      );
       setMessage("Note added.");
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to add note");
@@ -351,6 +355,9 @@ function ContactsContent() {
     try {
       await api.deleteContactNote(selected.id, note.id);
       loadNotes(selected.id);
+      setContacts((prev) =>
+        prev.map((c) => (c.id === selected?.id ? { ...c, note_count: Math.max(0, (c.note_count || 0) - 1) } : c))
+      );
       setMessage("Note deleted.");
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to delete note");
@@ -447,6 +454,14 @@ function ContactsContent() {
                   </div>
                 </button>
                 <div className="flex items-center gap-1 shrink-0">
+                  {typeof contact.note_count === "number" && contact.note_count > 0 && (
+                    <span
+                      title={`${contact.note_count} ${contact.note_count === 1 ? "note" : "notes"}`}
+                      className="self-start mt-0.5 shrink-0 text-[10px] leading-none px-1.5 py-1 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8b8b96]"
+                    >
+                      {contact.note_count}
+                    </span>
+                  )}
                   <button
                     onClick={() => startEdit(contact)}
                     title="Edit"

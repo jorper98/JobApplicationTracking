@@ -1,5 +1,53 @@
 # Changelog
 
+## v1.2.5
+
+### Features
+
+- Dashboard stat boxes are now clickable and deep-link to their pages: Jobs,
+  Applications (Tracker), Companies, Contacts, and Resumes; each stat box
+  also shows a small note count under Jobs, Applications, Companies, and
+  Contacts
+- Dashboard Status Breakdown rows are clickable and open the Jobs page
+  pre-filtered to that status (`/jobs?status=...`)
+- Dashboard search bar above Recent Applications: searches jobs, companies,
+  and contacts (including note text) with a type icon per result
+  (briefcase / building / person) and deep-links to the selected record;
+  recent application rows are now clickable and open that job
+- Tracker board refactor: all columns now share one board with the archive
+  columns (Rejected, Ghosted, Not Pursued) collapsed to compact vertical
+  strips by default, so cards move between pipelines without switching views;
+  Pipeline and Archive buttons in the control bar show live totals and expand
+  or collapse their group with one click
+- Tracker columns: card lists scroll independently (fixed max height), empty
+  columns use a subtle compact drop zone that expands while a card is dragged
+  over, and each column can be collapsed/expanded individually
+- Tracker "Compact View" toggle renders cards as single-line items; the view
+  mode, compact setting, and collapsed columns persist in localStorage
+- Tracker cards: an eye icon opens a job preview modal without leaving the
+  page (title, company, company notes, location, date added, status, tags,
+  notes, and a collapsible description)
+- Note count badges on cards: the tracker board and the Jobs, Companies, and
+  Contacts list pages show a small count in the top-right corner of each card
+  that has notes; the Jobs/Companies/Contacts list and detail APIs return the
+  counts, so no extra requests are needed
+
+### Bug fixes
+
+- The job description popup no longer scrolls the page behind it: body
+  scroll is locked while open and long descriptions scroll inside the modal
+- Closing the Add Job modal (cancel or save) now strips the lingering
+  `?new=true` from the URL so the modal no longer re-opens on navigation
+  or refresh
+- Dashboard note counts were inflated for multi-line notes (newlines inside a
+  note were counted as separate notes) and Applications always showed 0 (it
+  counted the unused tracker-entry notes field instead of the records' job
+  notes); both now count actual note records
+
+### Version bump
+
+- Version bumped to 1.2.5
+
 ## v1.2.4
 
 ### Features

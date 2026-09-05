@@ -54,12 +54,18 @@ def _with_job_count(db: Session, user: User, companies: List[Company]) -> List[C
         .group_by(Job.company_id)
         .all()
     )
+    note_counts = dict(
+        db.query(CompanyNote.company_id, func.count(CompanyNote.id))
+        .group_by(CompanyNote.company_id)
+        .all()
+    )
     return [
         CompanyResponse(
             id=c.id,
             name=c.name,
             notes=c.notes,
             job_count=counts.get(c.id, 0),
+            note_count=note_counts.get(c.id, 0),
             created_at=c.created_at,
             updated_at=c.updated_at,
         )

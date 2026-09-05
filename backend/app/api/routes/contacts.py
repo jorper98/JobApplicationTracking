@@ -41,7 +41,16 @@ def _get_owned_job(db: Session, user: User, job_id: str):
     return job
 
 
-def _contact_to_response(db: Session, contact: Contact) -> ContactResponse:
+def _contact_note_count(db: Session, contact_id: str) -> int:
+    return (
+        db.query(func.count(ContactNote.id))
+        .filter(ContactNote.contact_id == contact_id)
+        .scalar()
+        or 0
+    )
+
+
+def _contact_to_response(db: Session, contact: Contact, note_count: int = 0) -> ContactResponse:
     company_links = [
         ContactLinkResponse(id=cc.company.id, name=cc.company.name, email=None)
         for cc in contact.contact_companies if cc.company
@@ -62,6 +71,7 @@ def _contact_to_response(db: Session, contact: Contact) -> ContactResponse:
         companies=company_links,
         jobs=job_links,
         contacts=contact_links,
+        note_count=note_count,
         created_at=contact.created_at,
         updated_at=contact.updated_at,
     )
@@ -112,14 +122,22 @@ def list_contacts(
             | func.coalesce(func.lower(Contact.email), "").like(pattern)
         )
     contacts = query.order_by(func.lower(Contact.name)).offset(offset).limit(limit).all()
-    return [_contact_to_response(db, c) for c in contacts]
+    if not contacts:
+        return []
+    note_counts = dict(
+        db.query(ContactNote.contact_id, func.count(ContactNote.id))
+        .filter(ContactNote.contact_id.in_([c.id for c in contacts]))
+        .group_by(ContactNote.contact_id)
+        .all()
+    )
+    return [_contact_to_response(db, c, note_counts.get(c.id, 0)) for c in contacts]
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)
 def get_contact(contact_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get a single contact."""
     contact = _get_owned_contact(db, user, contact_id)
-    return _contact_to_response(db, contact)
+    return _contact_to_response(db, contact, _contact_note_count(db, contact.id))
 
 
 @router.post("/", response_model=ContactResponse)
@@ -139,7 +157,7 @@ def create_contact(
     log_activity(db, user.id, "created", "contact", contact.id, contact.name)
     db.commit()
     db.refresh(contact)
-    return _contact_to_response(db, contact)
+    return _contact_to_response(db, contact, _contact_note_count(db, contact.id))
 
 
 @router.patch("/{contact_id}", response_model=ContactResponse)
@@ -161,7 +179,7 @@ def update_contact(
     log_activity(db, user.id, "updated", "contact", contact.id, contact.name)
     db.commit()
     db.refresh(contact)
-    return _contact_to_response(db, contact)
+    return _contact_to_response(db, contact, _contact_note_count(db, contact.id))
 
 
 @router.delete("/{contact_id}")

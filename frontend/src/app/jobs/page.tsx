@@ -189,6 +189,12 @@ function JobsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs, searchParams]);
 
+  // Apply a ?status= filter (e.g. from the dashboard status breakdown)
+  useEffect(() => {
+    const sp = searchParams.get("status");
+    if (sp) setStatusFilter(sp);
+  }, [searchParams]);
+
   // Close the drawer on Esc
   useEffect(() => {
     if (!drawerResumeId) return;
@@ -289,6 +295,16 @@ function JobsContent() {
   const openEditModal = (job: Job) => {
     setEditingJob(job);
     setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    if (searchParams.get("new") === "true") {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("new");
+      const qs = params.toString();
+      router.replace(qs ? `/jobs?${qs}` : "/jobs", { scroll: false });
+    }
   };
 
   const handleModalSave = (savedJob: Job) => {
@@ -688,6 +704,14 @@ function JobsContent() {
                   </div>
                 </button>
                 <div className="flex items-center gap-1 shrink-0">
+                  {typeof job.note_count === "number" && job.note_count > 0 && (
+                    <span
+                      title={`${job.note_count} ${job.note_count === 1 ? "note" : "notes"}`}
+                      className="self-start mt-0.5 shrink-0 text-[10px] leading-none px-1.5 py-1 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-500 dark:text-[#8b8b96]"
+                    >
+                      {job.note_count}
+                    </span>
+                  )}
                   {job.description && (
                     <button
                       onClick={() => setDescJob(job)}
@@ -1407,7 +1431,7 @@ function JobsContent() {
 
       <JobModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         job={editingJob || undefined}
         onSave={handleModalSave}
         initialStatus={editingJob ? statusMap[editingJob.id] || "saved" : undefined}

@@ -22,6 +22,21 @@ def _get_owned_job(db: Session, user: User, job_id: str) -> Job:
     return job
 
 
+def _job_to_response(job: Job, note_count: int = 0) -> JobResponse:
+    return JobResponse(
+        id=job.id,
+        title=job.title,
+        company=job.company,
+        company_id=job.company_id,
+        description=job.description,
+        url=job.url,
+        location=job.location,
+        extracted_skills=job.extracted_skills,
+        note_count=note_count,
+        created_at=job.created_at,
+    )
+
+
 def _extract_job_skills_in_background(user_id: str, job_id: str, description: str) -> None:
     """Run after the response is sent: AI-extract skills and update the job.
 
@@ -109,7 +124,7 @@ def create_job(
     if job_data.description:
         background_tasks.add_task(_extract_job_skills_in_background, user.id, job.id, job_data.description)
 
-    return job
+    return _job_to_response(job)
 
 
 @router.get("/", response_model=List[JobResponse])
@@ -120,7 +135,7 @@ def list_jobs(
     db: Session = Depends(get_db),
 ):
     """List the current user's jobs, newest first, with pagination."""
-    return (
+    jobs = (
         db.query(Job)
         .filter(Job.user_id == user.id)
         .order_by(Job.created_at.desc())
@@ -128,12 +143,25 @@ def list_jobs(
         .limit(limit)
         .all()
     )
+    if not jobs:
+        return []
+    note_counts = dict(
+        db.query(JobNote.job_id, func.count(JobNote.id))
+        .filter(JobNote.job_id.in_([j.id for j in jobs]))
+        .group_by(JobNote.job_id)
+        .all()
+    )
+    return [_job_to_response(job, note_counts.get(job.id, 0)) for job in jobs]
 
 
 @router.get("/{job_id}", response_model=JobResponse)
 def get_job(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get a specific job."""
-    return _get_owned_job(db, user, job_id)
+    job = _get_owned_job(db, user, job_id)
+    note_count = (
+        db.query(func.count(JobNote.id)).filter(JobNote.job_id == job.id).scalar() or 0
+    )
+    return _job_to_response(job, note_count)
 
 
 @router.patch("/{job_id}", response_model=JobResponse)
@@ -169,7 +197,7 @@ def update_job(job_id: str, job_data: JobUpdate, user: User = Depends(get_curren
     log_activity(db, user.id, "updated", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
-    return job
+    return _job_to_response(job)
 
 
 @router.delete("/{job_id}")
@@ -272,7 +300,7 @@ def create_job_from_url(
     log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
-    return job
+    return _job_to_response(job)
 
 
 @router.post("/from-url/preview")
@@ -345,7 +373,7 @@ def create_job_from_text(
     log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
     db.refresh(job)
-    return job
+    return _job_to_response(job)
 
 
 @router.post("/from-text/preview")

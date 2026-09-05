@@ -155,6 +155,10 @@ export const api = {
     const { data } = await client.get(`/api/jobs/${jobId}/notes`);
     return data;
   },
+  getJob: async (id: string) => {
+    const { data } = await client.get(`/api/jobs/${id}`);
+    return data;
+  },
   createJobNote: async (jobId: string, note: string) => {
     const { data } = await client.post(`/api/jobs/${jobId}/notes`, { note });
     return data;

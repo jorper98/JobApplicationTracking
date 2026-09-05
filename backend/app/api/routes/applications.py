@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Application, Job, JobAnalysis, Resume, User, ApplicationStatus
+from app.models.models import Application, Job, JobAnalysis, JobNote, Resume, User, ApplicationStatus
 from app.schemas.schemas import ApplicationCreate, ApplicationUpdate, ApplicationResponse
 from app.core.auth import get_current_user
 from app.core.activity import log_activity
@@ -120,6 +121,12 @@ def get_kanban(user: User = Depends(get_current_user), db: Session = Depends(get
         .all()
     )
 
+    note_counts = dict(
+        db.query(JobNote.job_id, func.count(JobNote.id))
+        .group_by(JobNote.job_id)
+        .all()
+    )
+
     board = {status.value: [] for status in ApplicationStatus}
     for app in applications:
         job = app.job
@@ -134,6 +141,7 @@ def get_kanban(user: User = Depends(get_current_user), db: Session = Depends(get
             "applied_date": app.applied_date.isoformat() if app.applied_date else None,
             "follow_up_date": app.follow_up_date.isoformat() if app.follow_up_date else None,
             "notes": app.notes,
+            "note_count": note_counts.get(app.job_id, 0),
         })
 
     return board
