@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.2.6",
+    version="1.2.7",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -71,6 +71,10 @@ def on_startup():
                     conn.execute(text("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE"))
                 if "verified" not in columns:
                     conn.execute(text("ALTER TABLE users ADD COLUMN verified BOOLEAN NOT NULL DEFAULT TRUE"))
+                if "reset_token_hash" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN reset_token_hash VARCHAR"))
+                if "reset_token_expires_at" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN reset_token_expires_at TIMESTAMP WITH TIME ZONE"))
     except Exception as exc:
         print("users column check failed:", exc)
     # Legacy Clerk-era schema: replace clerk_id with password_hash and link
@@ -171,6 +175,7 @@ def on_startup():
                 "CREATE INDEX IF NOT EXISTS ix_applications_job_id ON applications (job_id)",
                 "CREATE INDEX IF NOT EXISTS ix_ai_usage_user_id ON ai_usage (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_ai_usage_feature ON ai_usage (feature)",
+                "CREATE INDEX IF NOT EXISTS ix_users_reset_token_hash ON users (reset_token_hash)",
                 "CREATE INDEX IF NOT EXISTS ix_contacts_user_id ON contacts (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_notes_contact_id ON contact_notes (contact_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_note_tags_note_id ON contact_note_tags (note_id)",

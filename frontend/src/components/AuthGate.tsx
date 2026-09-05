@@ -16,7 +16,7 @@ import { Loader2 } from "lucide-react";
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
-  const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/verify-email";
+  const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/verify-email" || pathname === "/forgot-password" || pathname === "/reset-password";
 
   useEffect(() => {
     if (loading) return;

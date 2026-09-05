@@ -15,6 +15,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<{ access_token?: string; message?: string }>;
+  updateProfile: (payload: { email?: string; full_name?: string | null; current_password?: string; new_password?: string }) => Promise<AuthUser & { requires_verification?: boolean }>;
   logout: () => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   login: async () => {},
   register: async () => ({}),
+  updateProfile: async () => ({ id: "", email: "" }),
   logout: async () => {},
 });
 
@@ -62,8 +64,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfile = async (payload: { email?: string; full_name?: string | null; current_password?: string; new_password?: string }) => {
+    const data = await api.updateProfile(payload);
+    if (data.requires_verification) {
+      await api.logout();
+      setUser(null);
+    } else {
+      setUser(data);
+    }
+    return data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, updateProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );

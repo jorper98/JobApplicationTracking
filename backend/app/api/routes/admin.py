@@ -25,6 +25,10 @@ class AdminUpdateUser(BaseModel):
     password: str | None = Field(default=None, min_length=6)
 
 
+class AdminResetPassword(BaseModel):
+    password: str = Field(min_length=6)
+
+
 def _user_payload(user: User) -> dict:
     return {
         "id": user.id,
@@ -46,6 +50,13 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def require_normalized_email(email: str) -> str:
+    normalized = normalize_email(email)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Email is required")
+    return normalized
+
+
 @router.get("/")
 def list_users(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """List all users (admin only)."""
@@ -56,7 +67,7 @@ def list_users(admin: User = Depends(get_current_admin), db: Session = Depends(g
 @router.post("/")
 def create_user(data: AdminCreateUser, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """Create a new user (admin only)."""
-    email = normalize_email(data.email)
+    email = require_normalized_email(data.email)
     existing = db.query(User).filter(func.lower(User.email) == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email already exists")
@@ -94,6 +105,17 @@ def update_user(user_id: str, data: AdminUpdateUser, admin: User = Depends(get_c
     db.commit()
     db.refresh(user)
     return _user_payload(user)
+
+
+@router.post("/{user_id}/reset-password")
+def reset_user_password(user_id: str, data: AdminResetPassword, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Set a user's password directly (admin only)."""
+    user = _get_user_or_404(db, user_id)
+    user.password_hash = hash_password(data.password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    db.commit()
+    return {"message": "Password reset"}
 
 
 @router.delete("/{user_id}")

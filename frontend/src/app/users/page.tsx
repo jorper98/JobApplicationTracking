@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { PageLoading, PageShell } from "@/components/PageShell";
-import { Plus, Pencil, Trash2, Shield, User as UserIcon } from "lucide-react";
+import { KeyRound, Plus, Pencil, Trash2, Shield, User as UserIcon } from "lucide-react";
 
 interface ManagedUser {
   id: string;
@@ -26,6 +26,8 @@ export default function UsersPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [editForm, setEditForm] = useState({ full_name: "", is_admin: false, password: "" });
+  const [resetting, setResetting] = useState<ManagedUser | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = () => {
@@ -109,6 +111,24 @@ export default function UsersPage() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetting) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.resetUserPassword(resetting.id, resetPassword);
+      setMessage(`Password reset for ${resetting.email}.`);
+      setResetting(null);
+      setResetPassword("");
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setError(Array.isArray(detail) ? detail[0]?.msg || "Invalid input" : detail || "Failed to reset password.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const inputClass =
     "w-full bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500";
 
@@ -175,6 +195,9 @@ export default function UsersPage() {
               {u.is_admin ? "Admin" : "User"}
             </span>
             <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => { setResetting(u); setResetPassword(""); setError(""); setMessage(""); }} title="Reset password" className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors">
+                <KeyRound className="w-4 h-4" />
+              </button>
               <button onClick={() => startEdit(u)} title="Edit" className="p-1.5 rounded-lg text-gray-400 dark:text-[#6b6b72] hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.05] transition-colors">
                 <Pencil className="w-4 h-4" />
               </button>
@@ -210,6 +233,32 @@ export default function UsersPage() {
               </button>
               <button onClick={handleSaveEdit} disabled={busy} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">
                 {busy ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setResetting(null)} />
+          <div className="relative bg-white dark:bg-[#0b0b11] border border-gray-200 dark:border-white/[0.08] rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Reset Password</h3>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] mb-4">Set a new password for {resetting.email}. Share it securely with the user.</p>
+            <input
+              type="password"
+              minLength={6}
+              placeholder="New password (min 6 chars)"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              className={inputClass}
+            />
+            <div className="flex gap-3 mt-5 justify-end">
+              <button onClick={() => setResetting(null)} className="text-gray-500 dark:text-[#8b8b96] px-4 py-2 rounded-lg text-sm border border-gray-200 dark:border-white/[0.08]">
+                Cancel
+              </button>
+              <button onClick={handleResetPassword} disabled={busy || resetPassword.length < 6} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">
+                {busy ? "Resetting..." : "Reset Password"}
               </button>
             </div>
           </div>

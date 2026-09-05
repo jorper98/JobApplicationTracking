@@ -3,12 +3,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
 
 from app.core.auth import (
     create_access_token,
     create_email_verification_token,
+    create_password_reset_token,
     decode_email_verification_token,
     get_current_user,
+    hash_reset_token,
     hash_password,
     verify_password,
 )
@@ -23,7 +26,7 @@ from app.core.rate_limit import (
 )
 from app.db.database import get_db
 from app.models.models import AppSetting, User
-from app.services.email_service import send_verification_email, smtp_configured
+from app.services.email_service import send_password_reset_email, send_verification_email, smtp_configured
 
 router = APIRouter()
 
@@ -41,6 +44,22 @@ class LoginRequest(BaseModel):
 
 class ResendRequest(BaseModel):
     email: str = Field(min_length=3)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=3)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20)
+    password: str = Field(min_length=6)
+
+
+class ProfileUpdateRequest(BaseModel):
+    email: str | None = Field(default=None, min_length=3)
+    full_name: str | None = None
+    current_password: str | None = None
+    new_password: str | None = Field(default=None, min_length=6)
 
 
 def _user_payload(user: User) -> dict:
@@ -63,6 +82,17 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def require_normalized_email(email: str) -> str:
+    normalized = normalize_email(email)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Email is required")
+    return normalized
+
+
+def find_user_by_email(db: Session, email: str) -> User | None:
+    return db.query(User).filter(func.lower(User.email) == normalize_email(email)).first()
+
+
 @router.post("/register")
 def register(
     data: RegisterRequest,
@@ -71,8 +101,8 @@ def register(
 ):
     """Create a new account. Sends an email verification link (double
     opt-in) when SMTP is configured; otherwise auto-verifies (dev mode)."""
-    email = normalize_email(data.email)
-    existing = db.query(User).filter(func.lower(User.email) == email).first()
+    email = require_normalized_email(data.email)
+    existing = find_user_by_email(db, email)
     if existing:
         raise HTTPException(status_code=400, detail="Registration failed")
 
@@ -135,8 +165,8 @@ def resend_verification(
 ):
     """Resend the verification email (rate limited; always returns the same
     response to avoid account enumeration)."""
-    email = normalize_email(data.email)
-    user = db.query(User).filter(func.lower(User.email) == email).first()
+    email = require_normalized_email(data.email)
+    user = find_user_by_email(db, email)
     if user and not user.verified and smtp_configured():
         token = create_email_verification_token(user.id)
         try:
@@ -157,8 +187,8 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Verify credentials and return a session token."""
-    email = normalize_email(data.email)
-    user = db.query(User).filter(func.lower(User.email) == email).first()
+    email = require_normalized_email(data.email)
+    user = find_user_by_email(db, email)
     if not user:
         record_failed_login(email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -176,6 +206,100 @@ def login(
     response = JSONResponse(content={"access_token": token, "user": _user_payload(user)})
     _set_session_cookie(response, token)
     return response
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    data: ForgotPasswordRequest,
+    _limit: None = Depends(resend_rate_limit),
+    db: Session = Depends(get_db),
+):
+    """Send a single-use password reset link when the account exists."""
+    generic = {"message": "If that email has an account, a password reset link has been sent. Please check your inbox."}
+    if not smtp_configured():
+        raise HTTPException(status_code=503, detail="Password reset email is not available because SMTP is not configured")
+
+    email = require_normalized_email(data.email)
+    user = find_user_by_email(db, email)
+    if not user:
+        return generic
+
+    token = create_password_reset_token()
+    user.reset_token_hash = hash_reset_token(token)
+    user.reset_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=6)
+    db.commit()
+    try:
+        send_password_reset_email(user.email, token)
+    except Exception as exc:
+        user.reset_token_hash = None
+        user.reset_token_expires_at = None
+        db.commit()
+        print(f"Password reset email failed to send to {user.email}:", exc)
+        raise HTTPException(status_code=502, detail="Could not send the password reset email. Please try again later.")
+    return generic
+
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset a password using a valid, unexpired, single-use reset token."""
+    token_hash = hash_reset_token(data.token)
+    user = db.query(User).filter(User.reset_token_hash == token_hash).first()
+    if not user or not user.reset_token_expires_at:
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset link")
+
+    expires_at = user.reset_token_expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        user.reset_token_hash = None
+        user.reset_token_expires_at = None
+        db.commit()
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset link")
+
+    user.password_hash = hash_password(data.password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    db.commit()
+    return {"message": "Password updated. You can log in with your new password."}
+
+
+@router.patch("/profile")
+def update_profile(data: ProfileUpdateRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Update the signed-in user's profile. Password/email changes require the current password."""
+    changing_email = data.email is not None and normalize_email(data.email) != user.email.lower()
+    changing_password = bool(data.new_password)
+    if (changing_email or changing_password) and not verify_password(data.current_password or "", user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is required to change email or password")
+
+    if data.full_name is not None:
+        user.full_name = data.full_name.strip() or None
+    if changing_email:
+        email = require_normalized_email(data.email or "")
+        existing = find_user_by_email(db, email)
+        if existing and existing.id != user.id:
+            raise HTTPException(status_code=400, detail="An account with this email already exists")
+        user.email = email
+        user.verified = not smtp_configured()
+    if changing_password:
+        user.password_hash = hash_password(data.new_password or "")
+        user.reset_token_hash = None
+        user.reset_token_expires_at = None
+
+    if changing_email and smtp_configured():
+        token = create_email_verification_token(user.id)
+        try:
+            send_verification_email(user.email, token)
+        except Exception as exc:
+            db.rollback()
+            print(f"Profile email verification failed to send to {user.email}:", exc)
+            raise HTTPException(status_code=502, detail="Could not send the verification email. Please try again later.")
+
+    db.commit()
+    db.refresh(user)
+    payload = _user_payload(user)
+    if changing_email and smtp_configured():
+        payload["requires_verification"] = True
+    return payload
 
 
 @router.post("/logout")

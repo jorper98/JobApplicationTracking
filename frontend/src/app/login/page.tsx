@@ -118,7 +118,7 @@ export default function LoginPage() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.2.6</span>
+          <span className="text-xs text-slate-300">v1.2.7</span>
         </Link>
       </header>
 
@@ -126,7 +126,7 @@ export default function LoginPage() {
         <section className="bg-gray-100 dark:bg-[#0a0a0f] flex items-start justify-center p-10">
           <div className="w-full max-w-sm space-y-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white text-center">JobApplicationTracker</h1>
-            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.6</p>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.7</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -150,6 +150,11 @@ export default function LoginPage() {
                   placeholder="Your password"
                   className="w-full bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500"
                 />
+                <div className="mt-2 text-right">
+                  <Link href="/forgot-password" className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

@@ -19,11 +19,23 @@ services:
       - "8136:8136"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-job_tracker}
+      FRONTEND_URL: http://localhost:8137
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_TLS: false
+      SMTP_SSL: false
     depends_on:
       - db
+      - mailpit
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8136 --reload
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
   frontend:
     build: ./frontend

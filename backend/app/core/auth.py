@@ -60,6 +60,15 @@ def create_email_verification_token(user_id: str, expires_hours: int = 24) -> st
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
+def create_password_reset_token(expires_hours: int = 6) -> str:
+    """Create an opaque token for single-use password reset links."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def decode_email_verification_token(token: str) -> str:
     """Decode a verification token and return the user id.
 

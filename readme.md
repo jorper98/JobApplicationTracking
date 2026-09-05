@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.6-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.2.7-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -24,7 +24,7 @@ JobApplicationTracker is open source and ready for you to use. It is also provid
 - **Dashboard** — Application statistics, status breakdown charts, and recent activity
 - **Search & Filter** — Full-text search across jobs, notes, and skills with status/tag filters
 - **Data Export/Import** — Backup and restore your data (including contacts, relationships, and note tags) as a zip bundle
-- **User Management** — Multi-user support with admin controls (JWT authentication)
+- **User Management** — Multi-user support with admin controls, profile editing, forgot-password reset links, and admin password resets (JWT authentication)
 - **Admin Settings** — Manage the AI model, Gemini API key, SMTP, and login-page branding from an admin-only Settings page
 - **Dark Mode** — Light/dark theme toggle with system preference detection
 
@@ -34,7 +34,7 @@ JobApplicationTracker is open source and ready for you to use. It is also provid
 
 **Frontend:** Next.js 14 · TypeScript · Tailwind CSS · Recharts · react-dropzone · axios
 
-**Infrastructure:** Docker Compose · PostgreSQL container
+**Infrastructure:** Docker Compose · PostgreSQL container · Mailpit local email testing
 
 ## Quick Start
 
@@ -57,6 +57,11 @@ Create `.env` files in both `backend/` and `frontend/` directories:
 DATABASE_URL=postgresql://postgres:password@db:5432/job_tracker
 GEMINI_API_KEY=your_gemini_api_key_here
 JWT_SECRET=your_secure_random_secret_here
+FRONTEND_URL=http://localhost:8137
+SMTP_HOST=mailpit
+SMTP_PORT=1025
+SMTP_TLS=false
+SMTP_SSL=false
 DEBUG=true
 ```
 
@@ -74,6 +79,7 @@ The application will be available at:
 - **Frontend:** http://localhost:8137
 - **Backend API:** http://localhost:8136
 - **API Docs:** http://localhost:8136/docs
+- **Mailpit email UI:** http://localhost:8025
 
 ### 4. Create your account
 
@@ -138,6 +144,10 @@ docker-compose restart backend    # restart a single service
 docker-compose up --build backend # rebuild a single service
 ```
 
+Mailpit is included in local Docker development. Use SMTP host `mailpit`, port
+`1025`, TLS disabled, and open http://localhost:8025 to inspect verification
+and password reset emails.
+
 ### Backend only
 
 ```bash
@@ -193,5 +203,5 @@ has been refactored for better readability and maintainability.
 
 ---
 
-**Version:** 1.2.6  
+**Version:** 1.2.7
 **Last Updated:** 2026-09-05

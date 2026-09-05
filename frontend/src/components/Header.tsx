@@ -21,18 +21,19 @@ export function Header() {
               JobApplicationTracker
             </span>
             <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">
-              v1.2.6
+              v1.2.7
             </span>
           </div>
         </Link>
         <div className="flex items-center gap-1">
           {user && (
-            <span
+            <Link
+              href="/profile"
               className="text-sm text-gray-600 dark:text-[#c0c0c8] max-w-[180px] truncate hidden md:inline mr-1"
               title={user.email}
             >
               {user.full_name || user.email}
-            </span>
+            </Link>
           )}
           <button
             onClick={logout}

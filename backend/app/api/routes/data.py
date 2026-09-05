@@ -53,6 +53,8 @@ def serialize_model(obj):
                     value = str(Path(value).relative_to(Path(settings.UPLOAD_DIR)))
                 except Exception:
                     value = Path(value).name
+        if isinstance(obj, User) and column.name in ("reset_token_hash", "reset_token_expires_at"):
+            value = None
         serialized[column.name] = value
     return serialized
 

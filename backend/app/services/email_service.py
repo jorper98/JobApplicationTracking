@@ -70,3 +70,27 @@ def send_verification_email(to: str, token: str) -> None:
     base_url = (settings.FRONTEND_URL or "http://localhost:8137").rstrip("/")
     link = f"{base_url}/verify-email?token={token}"
     send_email(to, "Verify your email - JobApplicationTracker", verification_email_html(link))
+
+
+def password_reset_email_html(link: str) -> str:
+    return f"""\
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background: #f3f4f6; padding: 24px;">
+  <div style="max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid #e5e7eb;">
+    <h2 style="margin-top: 0; color: #111827;">Reset your password</h2>
+    <p style="color: #374151;">We received a request to reset your JobApplicationTracker password. Click the link below to choose a new password.</p>
+    <p style="text-align: center; margin: 24px 0;">
+      <a href="{link}" style="background: #4f46e5; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">Reset Password</a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">If the button does not work, copy this link into your browser:<br/>{link}</p>
+    <p style="color: #6b7280; font-size: 13px;">This link expires in 6 hours. If you did not request a password reset, you can ignore this email.</p>
+  </div>
+</body>
+</html>"""
+
+
+def send_password_reset_email(to: str, token: str) -> None:
+    base_url = (settings.FRONTEND_URL or "http://localhost:8137").rstrip("/")
+    link = f"{base_url}/reset-password?token={token}"
+    send_email(to, "Reset your password - JobApplicationTracker", password_reset_email_html(link))

@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.2.7
+
+### Features
+
+- Added a Forgot Password flow that sends a unique, single-use reset link that
+  expires after 6 hours
+- Added a reset password page for setting a new password from the emailed link
+- Added a Profile page where signed-in users can update their name, email, and
+  password
+- Linked the signed-in user's name in the header to the Profile page
+- Added an admin password reset action for recovering user accounts when SMTP
+  or self-service reset is unavailable
+- Replaced the production rebuild PowerShell script with an Ubuntu-friendly
+  `rebuildprod.sh`
+- Added Mailpit to the local Docker Compose stack for testing verification and
+  password reset emails at `http://localhost:8025`
+
+### Security and reliability
+
+- Password reset tokens are stored hashed, cleared after use, and excluded from
+  exported backup payloads
+- Email and password changes require the current password
+- Email changes are normalized, checked for uniqueness, and require verification
+  of the new address when SMTP is configured
+- Added backend tests covering email normalization, password reset links,
+  profile changes, and admin password resets
+
+### Version bump
+
+- Version bumped to 1.2.7
+
 ## v1.2.6
 
 ### Security and reliability

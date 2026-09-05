@@ -33,6 +33,18 @@ export const api = {
     const { data } = await client.post("/api/auth/resend-verification", { email });
     return data;
   },
+  forgotPassword: async (email: string) => {
+    const { data } = await client.post("/api/auth/forgot-password", { email });
+    return data;
+  },
+  resetPassword: async (token: string, password: string) => {
+    const { data } = await client.post("/api/auth/reset-password", { token, password });
+    return data;
+  },
+  updateProfile: async (payload: { email?: string; full_name?: string | null; current_password?: string; new_password?: string }) => {
+    const { data } = await client.patch("/api/auth/profile", payload);
+    return data;
+  },
   // Admin: user management
   listUsers: async () => {
     const { data } = await client.get("/api/users/");
@@ -44,6 +56,10 @@ export const api = {
   },
   updateUser: async (id: string, payload: { full_name?: string; is_admin?: boolean; password?: string }) => {
     const { data } = await client.patch(`/api/users/${id}`, payload);
+    return data;
+  },
+  resetUserPassword: async (id: string, password: string) => {
+    const { data } = await client.post(`/api/users/${id}/reset-password`, { password });
     return data;
   },
   deleteUser: async (id: string) => {
