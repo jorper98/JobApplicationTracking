@@ -332,6 +332,16 @@ class LoginPageSettingsUpdate(BaseModel):
     login_page_html: str = ""
 
 
+class WelcomeSettingsResponse(BaseModel):
+    welcome_modal_title: str
+    welcome_modal_html: str
+
+
+class WelcomeSettingsUpdate(BaseModel):
+    welcome_modal_title: str = ""
+    welcome_modal_html: str = ""
+
+
 @router.get("/settings/login-page", response_model=LoginPageSettingsResponse)
 def get_login_page_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """Return the custom HTML for the login page right panel (admin only)."""
@@ -348,6 +358,31 @@ def update_login_page_settings(
     _set_setting(db, "login_page_html", data.login_page_html)
     db.commit()
     return {"login_page_html": data.login_page_html}
+
+
+@router.get("/settings/welcome", response_model=WelcomeSettingsResponse)
+def get_welcome_settings(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Return the first-login welcome modal content (admin only)."""
+    from app.api.routes.auth import DEFAULT_WELCOME_HTML, DEFAULT_WELCOME_TITLE
+
+    return {
+        "welcome_modal_title": _get_setting(db, "welcome_modal_title") or DEFAULT_WELCOME_TITLE,
+        "welcome_modal_html": _get_setting(db, "welcome_modal_html") or DEFAULT_WELCOME_HTML,
+    }
+
+
+@router.put("/settings/welcome", response_model=WelcomeSettingsResponse)
+def update_welcome_settings(
+    data: WelcomeSettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Persist the first-login welcome modal content (admin only)."""
+    title = data.welcome_modal_title.strip() or "Welcome to JobApplicationTracker"
+    _set_setting(db, "welcome_modal_title", title)
+    _set_setting(db, "welcome_modal_html", data.welcome_modal_html)
+    db.commit()
+    return {"welcome_modal_title": title, "welcome_modal_html": data.welcome_modal_html}
 
 
 @router.get("/usage")

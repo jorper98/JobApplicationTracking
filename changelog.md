@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.2.8
+
+### Features
+
+- Added a first-login welcome modal that appears once per user after login,
+  explains the application, and can scroll for longer content
+- Added admin-editable welcome modal title and HTML content in Settings, stored
+  in the database
+
+### Configuration
+
+- Updated local Docker host ports to be sequential from the frontend port:
+  frontend `8137`, backend `8138`, Postgres `8139`, Mailpit SMTP `8140`,
+  and Mailpit UI `8141`
+- Added a root `.env.example` for Docker Compose host port variables so local
+  ports can be customized without editing `docker-compose.yml`
+
+### Version bump
+
+- Version bumped to 1.2.8
+
 ## v1.2.7
 
 ### Features
@@ -15,7 +36,7 @@
 - Replaced the production rebuild PowerShell script with an Ubuntu-friendly
   `rebuildprod.sh`
 - Added Mailpit to the local Docker Compose stack for testing verification and
-  password reset emails at `http://localhost:8025`
+  password reset emails at `http://localhost:8141`
 
 ### Security and reliability
 

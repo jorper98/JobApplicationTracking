@@ -62,8 +62,28 @@ class ProfileUpdateRequest(BaseModel):
     new_password: str | None = Field(default=None, min_length=6)
 
 
+DEFAULT_WELCOME_TITLE = "Welcome to JobApplicationTracker"
+DEFAULT_WELCOME_HTML = """
+<p>JobApplicationTracker helps you organize your job search from first lead to final decision.</p>
+<h3>How to get started</h3>
+<ol>
+  <li>Upload your resume so the app can extract your skills.</li>
+  <li>Add jobs manually or import a job posting URL.</li>
+  <li>Run match analysis to compare your resume against each job.</li>
+  <li>Track each opportunity on the application tracker board.</li>
+  <li>Use Companies, Contacts, Notes, and Activity to keep every detail in one place.</li>
+</ol>
+<p>You can update your profile from your name in the top-right header.</p>
+""".strip()
+
+
 def _user_payload(user: User) -> dict:
     return {"id": user.id, "email": user.email, "full_name": user.full_name, "is_admin": user.is_admin}
+
+
+def _get_setting(db: Session, key: str) -> str | None:
+    row = db.get(AppSetting, key)
+    return row.value if row else None
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -300,6 +320,25 @@ def update_profile(data: ProfileUpdateRequest, user: User = Depends(get_current_
     if changing_email and smtp_configured():
         payload["requires_verification"] = True
     return payload
+
+
+@router.get("/welcome")
+def get_welcome(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return first-login welcome modal content until dismissed by this user."""
+    return {
+        "show": user.welcome_seen_at is None,
+        "title": _get_setting(db, "welcome_modal_title") or DEFAULT_WELCOME_TITLE,
+        "html": _get_setting(db, "welcome_modal_html") or DEFAULT_WELCOME_HTML,
+    }
+
+
+@router.post("/welcome/dismiss")
+def dismiss_welcome(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Mark the first-login welcome modal as seen for this user."""
+    if user.welcome_seen_at is None:
+        user.welcome_seen_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"message": "Welcome dismissed"}
 
 
 @router.post("/logout")

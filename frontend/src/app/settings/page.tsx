@@ -31,20 +31,27 @@ export default function SettingsPage() {
   // Login page settings
   const [loginPageHtml, setLoginPageHtml] = useState("");
 
+  // First-login welcome modal settings
+  const [welcomeTitle, setWelcomeTitle] = useState("");
+  const [welcomeHtml, setWelcomeHtml] = useState("");
+
   const [savingAi, setSavingAi] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [savingLoginPage, setSavingLoginPage] = useState(false);
+  const [savingWelcome, setSavingWelcome] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [smtpMessage, setSmtpMessage] = useState<string | null>(null);
   const [loginPageMessage, setLoginPageMessage] = useState<string | null>(null);
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [aiError, setAiError] = useState("");
   const [smtpError, setSmtpError] = useState("");
   const [loginPageError, setLoginPageError] = useState("");
+  const [welcomeError, setWelcomeError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.getAISettings(), api.getSmtpSettings(), api.getLoginPageSettings()])
-      .then(([ai, smtp, loginPage]) => {
+    Promise.all([api.getAISettings(), api.getSmtpSettings(), api.getLoginPageSettings(), api.getWelcomeSettings()])
+      .then(([ai, smtp, loginPage, welcome]) => {
         setModel(ai.gemini_model);
         setKeySet(ai.gemini_api_key_set);
         setSmtpHost(smtp.smtp_host);
@@ -57,6 +64,8 @@ export default function SettingsPage() {
         setSmtpTls(smtp.smtp_tls);
         setSmtpSsl(smtp.smtp_ssl);
         setLoginPageHtml(loginPage.login_page_html);
+        setWelcomeTitle(welcome.welcome_modal_title);
+        setWelcomeHtml(welcome.welcome_modal_html);
       })
       .catch((e) => setAiError(e?.response?.data?.detail || "Failed to load settings"))
       .finally(() => setLoading(false));
@@ -163,6 +172,25 @@ export default function SettingsPage() {
       setLoginPageError(e?.response?.data?.detail || "Failed to save login page settings");
     } finally {
       setSavingLoginPage(false);
+    }
+  };
+
+  const handleSaveWelcome = async () => {
+    setSavingWelcome(true);
+    setWelcomeMessage(null);
+    setWelcomeError("");
+    try {
+      const data = await api.updateWelcomeSettings({
+        welcome_modal_title: welcomeTitle,
+        welcome_modal_html: welcomeHtml,
+      });
+      setWelcomeTitle(data.welcome_modal_title);
+      setWelcomeHtml(data.welcome_modal_html);
+      setWelcomeMessage("Welcome modal settings saved");
+    } catch (e: any) {
+      setWelcomeError(e?.response?.data?.detail || "Failed to save welcome modal settings");
+    } finally {
+      setSavingWelcome(false);
     }
   };
 
@@ -367,8 +395,8 @@ export default function SettingsPage() {
         <div>
           <h2 className="font-semibold text-gray-900 dark:text-white">Login page</h2>
           <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
-            Custom HTML rendered in the right panel of the login page (visible to everyone). Rendered as-is, so only
-            add trusted HTML.
+            Custom HTML rendered in the right panel of the login page (visible to everyone). Simple HTML is sanitized
+            before display.
           </p>
         </div>
 
@@ -397,6 +425,54 @@ export default function SettingsPage() {
         >
           <Save className="w-4 h-4" />
           {savingLoginPage ? "Saving..." : "Save Login Page Settings"}
+        </button>
+      </div>
+
+      {/* First-login welcome modal settings */}
+      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6 space-y-4">
+        <div>
+          <h2 className="font-semibold text-gray-900 dark:text-white">First-login welcome modal</h2>
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Shown once to each user after their first login. Content supports simple HTML and is sanitized before rendering.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Modal title</label>
+          <input
+            type="text"
+            value={welcomeTitle}
+            onChange={(e) => setWelcomeTitle(e.target.value)}
+            placeholder="Welcome to JobApplicationTracker"
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Modal HTML</label>
+          <textarea
+            value={welcomeHtml}
+            onChange={(e) => setWelcomeHtml(e.target.value)}
+            rows={12}
+            spellCheck={false}
+            placeholder={"<p>Welcome...</p>\n<ol>\n  <li>Upload your resume</li>\n  <li>Add jobs</li>\n</ol>"}
+            className="w-full bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500"
+          />
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Users who already dismissed the modal will not see updated content unless their seen flag is reset in the database.
+          </p>
+        </div>
+
+        {welcomeMessage && <p className="text-sm text-emerald-600 dark:text-emerald-400">{welcomeMessage}</p>}
+        {welcomeError && <p className="text-sm text-red-600 dark:text-red-400">{welcomeError}</p>}
+
+        <button
+          onClick={handleSaveWelcome}
+          disabled={savingWelcome}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Save className="w-4 h-4" />
+          {savingWelcome ? "Saving..." : "Save Welcome Modal"}
         </button>
       </div>
     </PageShell>

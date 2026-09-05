@@ -93,3 +93,45 @@ def test_admin_can_reset_user_password(client):
     client.cookies.clear()
     login = client.post("/api/auth/login", json={"email": user_email, "password": "newpass123"})
     assert login.status_code == 200
+
+
+def test_welcome_modal_shows_once_per_user(client):
+    email = "welcome-once@example.com"
+    client.post("/api/auth/register", json={"email": email, "password": "secret123"})
+
+    first = client.get("/api/auth/welcome")
+    assert first.status_code == 200
+    assert first.json()["show"] is True
+
+    dismiss = client.post("/api/auth/welcome/dismiss")
+    assert dismiss.status_code == 200
+
+    second = client.get("/api/auth/welcome")
+    assert second.status_code == 200
+    assert second.json()["show"] is False
+
+
+def test_admin_can_edit_welcome_modal_content(client):
+    from app.db.database import SessionLocal
+    from app.models.models import User
+
+    email = "welcome-admin@example.com"
+    client.post("/api/auth/register", json={"email": email, "password": "secret123"})
+
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == email).first()
+        admin.is_admin = True
+        db.commit()
+    finally:
+        db.close()
+
+    payload = {"welcome_modal_title": "Custom Welcome", "welcome_modal_html": "<p>Custom body</p>"}
+    update = client.put("/api/users/settings/welcome", json=payload)
+    assert update.status_code == 200
+    assert update.json() == payload
+
+    welcome = client.get("/api/auth/welcome")
+    assert welcome.status_code == 200
+    assert welcome.json()["title"] == "Custom Welcome"
+    assert welcome.json()["html"] == "<p>Custom body</p>"

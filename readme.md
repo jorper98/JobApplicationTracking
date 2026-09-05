@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.7-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.2.8-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -26,6 +26,7 @@ JobApplicationTracker is open source and ready for you to use. It is also provid
 - **Data Export/Import** — Backup and restore your data (including contacts, relationships, and note tags) as a zip bundle
 - **User Management** — Multi-user support with admin controls, profile editing, forgot-password reset links, and admin password resets (JWT authentication)
 - **Admin Settings** — Manage the AI model, Gemini API key, SMTP, and login-page branding from an admin-only Settings page
+- **First-login Guidance** — Show each user a one-time welcome modal with admin-editable onboarding content
 - **Dark Mode** — Light/dark theme toggle with system preference detection
 
 ## Tech Stack
@@ -50,7 +51,16 @@ cd JobApplicationTracker
 
 ### 2. Configure environment variables
 
-Create `.env` files in both `backend/` and `frontend/` directories:
+Create `.env` files in the project root, `backend/`, and `frontend/` directories:
+
+**.env** (Docker Compose host ports)
+```env
+FRONTEND_PORT=8137
+BACKEND_PORT=8138
+POSTGRES_PORT=8139
+MAILPIT_SMTP_PORT=8140
+MAILPIT_UI_PORT=8141
+```
 
 **backend/.env**
 ```env
@@ -67,7 +77,7 @@ DEBUG=true
 
 **frontend/.env**
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8136
+NEXT_PUBLIC_API_URL=http://localhost:8138
 ```
 
 ### 3. Start with Docker Compose
@@ -77,9 +87,11 @@ docker-compose up --build
 
 The application will be available at:
 - **Frontend:** http://localhost:8137
-- **Backend API:** http://localhost:8136
-- **API Docs:** http://localhost:8136/docs
-- **Mailpit email UI:** http://localhost:8025
+- **Backend API:** http://localhost:8138
+- **API Docs:** http://localhost:8138/docs
+- **Postgres:** localhost:8139
+- **Mailpit SMTP:** localhost:8140
+- **Mailpit email UI:** http://localhost:8141
 
 ### 4. Create your account
 
@@ -117,7 +129,7 @@ Rebuild the zip after editing `data.json` (Python 3.10+): `python sample_data/bu
 
 ## API Documentation
 
-Interactive API docs: http://localhost:8136/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), jobs (`/api/jobs/*`), companies (`/api/companies/*`), contacts (`/api/contacts/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
+Interactive API docs: http://localhost:8138/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), jobs (`/api/jobs/*`), companies (`/api/companies/*`), contacts (`/api/contacts/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
 
 ## Development
 
@@ -145,8 +157,12 @@ docker-compose up --build backend # rebuild a single service
 ```
 
 Mailpit is included in local Docker development. Use SMTP host `mailpit`, port
-`1025`, TLS disabled, and open http://localhost:8025 to inspect verification
+`1025`, TLS disabled inside Docker, and open http://localhost:8141 to inspect verification
 and password reset emails.
+
+Docker Compose reads the root `.env` file for host port mappings. The checked-in
+`.env.example` shows the default sequential ports starting at frontend port
+`8137`; `backend/.env` and `frontend/.env` remain application-specific.
 
 ### Backend only
 
@@ -203,5 +219,5 @@ has been refactored for better readability and maintainability.
 
 ---
 
-**Version:** 1.2.7
+**Version:** 1.2.8
 **Last Updated:** 2026-09-05

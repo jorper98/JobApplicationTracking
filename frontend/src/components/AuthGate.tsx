@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/Header";
 import { TopNav } from "@/components/TopNav";
 import { Footer } from "@/components/Footer";
+import { WelcomeModal } from "@/components/WelcomeModal";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -53,6 +54,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       </div>
       <main className="flex-1">{children}</main>
       <Footer />
+      <WelcomeModal userId={user.id} />
     </div>
   );
 }

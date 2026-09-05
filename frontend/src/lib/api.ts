@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8136";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8138";
 
 const client = axios.create({
   baseURL: BASE_URL,
@@ -97,9 +97,25 @@ export const api = {
     const { data } = await client.put("/api/users/settings/login-page", { login_page_html: loginPageHtml });
     return data;
   },
+  getWelcomeSettings: async () => {
+    const { data } = await client.get("/api/users/settings/welcome");
+    return data;
+  },
+  updateWelcomeSettings: async (payload: { welcome_modal_title: string; welcome_modal_html: string }) => {
+    const { data } = await client.put("/api/users/settings/welcome", payload);
+    return data;
+  },
   // Public: login page branding (no auth)
   getLoginPageHtml: async () => {
     const { data } = await client.get("/api/auth/login-page");
+    return data;
+  },
+  getWelcome: async () => {
+    const { data } = await client.get("/api/auth/welcome");
+    return data;
+  },
+  dismissWelcome: async () => {
+    const { data } = await client.post("/api/auth/welcome/dismiss");
     return data;
   },
   // Admin: AI usage log

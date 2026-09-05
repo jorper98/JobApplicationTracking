@@ -40,6 +40,7 @@ class User(Base):
     is_admin = Column(Boolean, nullable=False, default=False)
     reset_token_hash = Column(String, nullable=True, index=True)
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    welcome_seen_at = Column(DateTime(timezone=True), nullable=True)
     # Email verification (double opt-in). Existing rows default to verified.
     verified = Column(Boolean, nullable=False, server_default=text("true"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

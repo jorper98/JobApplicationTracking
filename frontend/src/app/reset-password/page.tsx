@@ -40,7 +40,7 @@ function ResetPasswordContent() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/login" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.2.7</span>
+          <span className="text-xs text-slate-300">v1.2.8</span>
         </Link>
       </header>
 
