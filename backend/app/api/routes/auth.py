@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -58,6 +59,10 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 @router.post("/register")
 def register(
     data: RegisterRequest,
@@ -66,12 +71,13 @@ def register(
 ):
     """Create a new account. Sends an email verification link (double
     opt-in) when SMTP is configured; otherwise auto-verifies (dev mode)."""
-    existing = db.query(User).filter(User.email == data.email).first()
+    email = normalize_email(data.email)
+    existing = db.query(User).filter(func.lower(User.email) == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Registration failed")
 
     user = User(
-        email=data.email,
+        email=email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         verified=not smtp_configured(),
@@ -129,7 +135,8 @@ def resend_verification(
 ):
     """Resend the verification email (rate limited; always returns the same
     response to avoid account enumeration)."""
-    user = db.query(User).filter(User.email == data.email.strip().lower()).first()
+    email = normalize_email(data.email)
+    user = db.query(User).filter(func.lower(User.email) == email).first()
     if user and not user.verified and smtp_configured():
         token = create_email_verification_token(user.id)
         try:
@@ -150,20 +157,21 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Verify credentials and return a session token."""
-    user = db.query(User).filter(User.email == data.email).first()
+    email = normalize_email(data.email)
+    user = db.query(User).filter(func.lower(User.email) == email).first()
     if not user:
-        record_failed_login(data.email)
+        record_failed_login(email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    check_account_lockout(data.email)
+    check_account_lockout(email)
     if not verify_password(data.password, user.password_hash):
-        record_failed_login(data.email)
+        record_failed_login(email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.verified:
         raise HTTPException(
             status_code=403,
             detail="Please verify your email before logging in. Check your inbox (or spam folders) for the verification link.",
         )
-    clear_login_failures(data.email)
+    clear_login_failures(email)
     token = create_access_token(user)
     response = JSONResponse(content={"access_token": token, "user": _user_payload(user)})
     _set_session_cookie(response, token)

@@ -125,10 +125,8 @@ export default function TrackerPage() {
 
   const handleDragStart = (card: AppCard, from: string) => setDragging({ card, from });
 
-  const handleDrop = async (to: string) => {
-    setDragOver(null);
-    if (!dragging || dragging.from === to) return;
-    const { card, from } = dragging;
+  const moveCardStatus = async (card: AppCard, from: string, to: string) => {
+    if (from === to) return;
     const prev = board;
     setBoard((prevState) => {
       const updated = { ...prevState };
@@ -143,6 +141,14 @@ export default function TrackerPage() {
       console.error("Failed to update status", e);
       setBoard(prev);
     }
+  };
+
+  const handleDrop = async (to: string) => {
+    setDragOver(null);
+    if (!dragging) return;
+    const { card, from } = dragging;
+    setDragging(null);
+    await moveCardStatus(card, from, to);
   };
 
   const handleDragOver = (key: string) => (e: React.DragEvent) => {
@@ -163,6 +169,8 @@ export default function TrackerPage() {
 
   const inputClass =
     "rounded-lg border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors";
+  const statusSelectClass =
+    "rounded-md border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#0d0d14] px-1.5 py-1 text-[11px] text-gray-600 dark:text-[#c0c0c8] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20";
 
   return (
     <PageShell>
@@ -331,6 +339,22 @@ export default function TrackerPage() {
                           {card.note_count}
                         </span>
                       )}
+                      <label className="sr-only" htmlFor={`status-${card.id}`}>
+                        Move {card.title} to status
+                      </label>
+                      <select
+                        id={`status-${card.id}`}
+                        value={key}
+                        onChange={(event) => moveCardStatus(card, key, event.target.value)}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        className={statusSelectClass + " max-w-[86px] opacity-0 group-hover:opacity-100 focus:opacity-100"}
+                      >
+                        {allColumns.map((column) => (
+                          <option key={column.key} value={column.key}>
+                            {column.label}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         onClick={() => setViewJob({ jobId: card.job_id, status: key })}
                         title="View job"
@@ -381,6 +405,24 @@ export default function TrackerPage() {
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </Link>
+                      </div>
+                      <div className="mt-2">
+                        <label className="sr-only" htmlFor={`status-${card.id}`}>
+                          Move {card.title} to status
+                        </label>
+                        <select
+                          id={`status-${card.id}`}
+                          value={key}
+                          onChange={(event) => moveCardStatus(card, key, event.target.value)}
+                          onMouseDown={(event) => event.stopPropagation()}
+                          className={statusSelectClass + " w-full"}
+                        >
+                          {allColumns.map((column) => (
+                            <option key={column.key} value={column.key}>
+                              {column.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   )

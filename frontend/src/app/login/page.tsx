@@ -5,6 +5,63 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
+const ALLOWED_LOGIN_TAGS = new Set([
+  "A",
+  "B",
+  "BR",
+  "DIV",
+  "EM",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "LI",
+  "OL",
+  "P",
+  "SPAN",
+  "STRONG",
+  "UL",
+]);
+
+const ALLOWED_LOGIN_ATTRS = new Set(["class", "href", "rel", "target", "title"]);
+
+function sanitizeLoginHtml(html: string) {
+  if (typeof window === "undefined" || !html.trim()) return "";
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  const sanitizeNode = (node: Node) => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      Array.from(element.childNodes).forEach(sanitizeNode);
+
+      if (!ALLOWED_LOGIN_TAGS.has(element.tagName)) {
+        element.replaceWith(...Array.from(element.childNodes));
+        return;
+      }
+
+      Array.from(element.attributes).forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value.replace(/[\u0000-\u001f\u007f\s]+/g, "").toLowerCase();
+        const unsafeHref = name === "href" && (value.startsWith("javascript:") || value.startsWith("data:") || value.startsWith("vbscript:"));
+        if (name.startsWith("on") || !ALLOWED_LOGIN_ATTRS.has(name) || unsafeHref) {
+          element.removeAttribute(attr.name);
+        }
+      });
+
+      if (element.tagName === "A") {
+        element.setAttribute("rel", "noopener noreferrer");
+      }
+      return;
+    }
+
+    Array.from(node.childNodes).forEach(sanitizeNode);
+  };
+
+  sanitizeNode(template.content);
+  return template.innerHTML;
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -15,6 +72,7 @@ export default function LoginPage() {
   const [resendMessage, setResendMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loginHtml, setLoginHtml] = useState("");
+  const safeLoginHtml = sanitizeLoginHtml(loginHtml);
 
   useEffect(() => {
     api
@@ -60,7 +118,7 @@ export default function LoginPage() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.2.5</span>
+          <span className="text-xs text-slate-300">v1.2.6</span>
         </Link>
       </header>
 
@@ -68,7 +126,7 @@ export default function LoginPage() {
         <section className="bg-gray-100 dark:bg-[#0a0a0f] flex items-start justify-center p-10">
           <div className="w-full max-w-sm space-y-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white text-center">JobApplicationTracker</h1>
-            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.5</p>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.6</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -137,11 +195,11 @@ export default function LoginPage() {
         </section>
 
         <section className="bg-gray-100 dark:bg-[#0a0a0f] p-10 space-y-6">
-          {loginHtml.trim() && (
+          {safeLoginHtml.trim() && (
             <div className="rounded-lg bg-white dark:bg-[#16161f] border border-gray-200 dark:border-white/[0.08] p-6">
               <div
                 className="login-page-html text-sm text-gray-600 dark:text-[#c0c0c8]"
-                dangerouslySetInnerHTML={{ __html: loginHtml }}
+                dangerouslySetInnerHTML={{ __html: safeLoginHtml }}
               />
             </div>
           )}

@@ -35,9 +35,16 @@ async def upload_resume(
     # Save file
     file_path = save_upload(contents, file.filename, user.id)
 
-    # Extract text
-    raw_text = extract_text_from_pdf(file_path)
+    try:
+        raw_text = extract_text_from_pdf(file_path)
+    except Exception:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=400, detail="Could not read PDF contents")
+
     if not raw_text.strip():
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(status_code=400, detail="Could not extract text from PDF")
 
     # Extract skills with AI (fallback to empty skill list if the model call fails)

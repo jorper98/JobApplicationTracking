@@ -24,6 +24,7 @@ interface JobRow {
   company_id?: string | null;
   location?: string;
   url?: string;
+  status?: string;
 }
 
 interface CompanyNote {
@@ -421,7 +422,7 @@ function CompaniesContent() {
   };
 
   const handleEditJob = (job: JobRow) => {
-    setJobModalJob(job);
+    setJobModalJob({ ...job, status: statusMap[job.id] });
     setJobModalOpen(true);
   };
 
@@ -916,6 +917,7 @@ function CompaniesContent() {
         job={jobModalJob ?? undefined}
         onSave={handleJobSaved}
         initialCompany={selected?.name}
+        initialStatus={jobModalJob?.status}
       />
 
       {noteModal && (

@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User, Resume, Job, Application, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, JobJob, ActivityLog
+from app.models.models import User, Resume, Job, Application, ApplicationStatus, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, JobJob, ActivityLog
 from app.core.activity import log_activity
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_admin
@@ -76,6 +76,47 @@ def filter_columns(model, row):
     return {key: value for key, value in row.items() if key in column_names}
 
 
+def normalize_application_status(value):
+    if isinstance(value, ApplicationStatus):
+        return value
+    if isinstance(value, str):
+        cleaned = value.strip()
+        for status in ApplicationStatus:
+            if cleaned == status.value or cleaned.upper() == status.name:
+                return status
+    raise HTTPException(status_code=400, detail=f"Invalid application status: {value!r}")
+
+
+def replace_directory_with_backup(target: Path, staging: Path):
+    """Move staging into target and return a backup path for rollback."""
+    backup = None
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        backup = target.with_name(f"{target.name}.backup-{uuid.uuid4().hex}")
+        target.rename(backup)
+    try:
+        staging.rename(target)
+    except Exception:
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+        if backup and backup.exists():
+            backup.rename(target)
+        raise
+    return backup
+
+
+def restore_directory_backup(target: Path, backup: Path | None):
+    if target.exists():
+        shutil.rmtree(target, ignore_errors=True)
+    if backup and backup.exists():
+        backup.rename(target)
+
+
+def cleanup_directory(path: Path | None):
+    if path and path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def validate_payload(payload):
     """Validate the imported payload before any data is touched."""
     if not isinstance(payload, dict):
@@ -93,6 +134,8 @@ def validate_payload(payload):
                     status_code=400,
                     detail=f"Row in {key!r} is missing required fields: {', '.join(missing)}",
                 )
+            if key == "applications":
+                normalize_application_status(row.get("status"))
 
 
 @router.get("/export")
@@ -207,30 +250,29 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
 
     upload_root = Path(settings.UPLOAD_DIR)
     user_upload_dir = upload_root / user.id
+    staging_upload_dir = upload_root / f".{user.id}.import-{uuid.uuid4().hex}"
+    backup_upload_dir = None
+    upload_swapped = False
 
-    # 4. Extract uploaded files with a zip-slip guard (before the DB transaction)
+    # 4. Extract uploaded files into staging with a zip-slip guard.
     try:
-        zip_basenames = set()
+        upload_root.mkdir(parents=True, exist_ok=True)
+        staging_upload_dir.mkdir(parents=True, exist_ok=True)
         for info in archive.infolist():
             if info.is_dir() or not info.filename.startswith("uploads/"):
                 continue
             basename = Path(info.filename).name
-            zip_basenames.add(basename)
-            target_path = (user_upload_dir / basename).resolve()
-            if not target_path.is_relative_to(user_upload_dir.resolve()):
+            target_path = (staging_upload_dir / basename).resolve()
+            if not target_path.is_relative_to(staging_upload_dir.resolve()):
                 raise HTTPException(status_code=400, detail="Archive contains paths outside the upload directory")
             target_path.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as source, open(target_path, "wb") as sink:
                 sink.write(source.read())
-
-        # Remove orphaned files not in the zip
-        if user_upload_dir.exists():
-            for existing in user_upload_dir.iterdir():
-                if existing.is_file() and existing.name not in zip_basenames:
-                    existing.unlink()
     except HTTPException:
+        cleanup_directory(staging_upload_dir)
         raise
     except Exception:
+        cleanup_directory(staging_upload_dir)
         raise HTTPException(status_code=400, detail="Could not extract archive contents")
 
     # 5. Replace the current user's data in a single transaction
@@ -369,6 +411,7 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             data = {**filter_columns(Application, sanitize_row(row)), "user_id": user.id}
             data["id"] = str(uuid.uuid4())
             data["job_id"] = job_id_map.get(data.get("job_id"))
+            data["status"] = normalize_application_status(data.get("status"))
             db.add(Application(**data))
 
         for row in payload.get("job_jobs", []):
@@ -378,11 +421,19 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             db.add(JobJob(**data))
 
         log_activity(db, user.id, "created", "data", entity_name="Imported backup")
+        db.flush()
+        backup_upload_dir = replace_directory_with_backup(user_upload_dir, staging_upload_dir)
+        upload_swapped = True
         db.commit()
     except Exception as exc:
         db.rollback()
+        if upload_swapped:
+            restore_directory_backup(user_upload_dir, backup_upload_dir)
+        cleanup_directory(staging_upload_dir)
         print("Data import failed, changes rolled back:", exc)
         raise HTTPException(status_code=500, detail="Import failed — no changes were applied")
+    cleanup_directory(backup_upload_dir)
+    return {"message": "Import complete"}
 
 @router.get("/system-backup")
 def system_backup(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
@@ -489,11 +540,14 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
 
     upload_root = Path(settings.UPLOAD_DIR)
     staging = Path(str(upload_root) + ".restore-tmp")
+    backup_upload_root = None
+    uploads_swapped = False
 
     # 1. Extract uploaded files into a staging dir (full tree, zip-slip guard)
     try:
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True, exist_ok=True)
         for info in archive.infolist():
             if info.is_dir() or not info.filename.startswith("uploads/"):
                 continue
@@ -588,26 +642,24 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
         for row in payload.get("notes", []):
             db.add(JobNote(**filter_columns(JobNote, sanitize_row(row))))
         for row in payload.get("applications", []):
-            db.add(Application(**filter_columns(Application, sanitize_row(row))))
+            data = filter_columns(Application, sanitize_row(row))
+            data["status"] = normalize_application_status(data.get("status"))
+            db.add(Application(**data))
         for row in payload.get("ai_usage", []):
             db.add(AIUsage(**filter_columns(AIUsage, sanitize_row(row))))
 
+        db.flush()
+        backup_upload_root = replace_directory_with_backup(upload_root, staging)
+        uploads_swapped = True
         db.commit()
     except Exception as exc:
         db.rollback()
-        if staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
+        if uploads_swapped:
+            restore_directory_backup(upload_root, backup_upload_root)
+        cleanup_directory(staging)
         print("System restore failed, changes rolled back:", exc)
         raise HTTPException(status_code=500, detail="Restore failed — no changes were applied")
-
-    # 3. Swap uploads: replace the live folder with the extracted staging tree
-    try:
-        if upload_root.exists():
-            shutil.rmtree(upload_root, ignore_errors=True)
-        staging.rename(upload_root)
-    except Exception as exc:
-        print("System restore: uploads swap failed:", exc)
-        raise HTTPException(status_code=500, detail="Restore failed during uploads swap — re-upload the backup")
+    cleanup_directory(backup_upload_root)
 
     return {"message": "System restore complete"}
 

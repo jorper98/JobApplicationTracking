@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.2.6
+
+### Security and reliability
+
+- Hardened backup import and system restore so uploaded files are staged first,
+  previous upload directories are preserved for rollback, and database/file
+  changes no longer leave partial restores on failure
+- Sanitized admin-configured login page HTML before rendering to remove unsafe
+  tags, event handlers, and scriptable link schemes
+- Normalized imported application statuses so exported backups restore cleanly
+  across database backends
+- Normalized email handling across registration, login, verification resend,
+  and admin-created users to avoid case-sensitive duplicate accounts
+- Hardened job URL fetching by disabling environment proxy use, revalidating
+  redirect targets, and removing uncontrolled Playwright fallback fetching
+- Resume uploads now clean up saved files and return controlled errors when PDF
+  parsing fails or no text can be extracted
+
+### Usability
+
+- Preserved tracker status when editing jobs from the Companies page
+- Added keyboard-accessible tracker status controls for changing application
+  status without drag and drop
+- Guarded Jobs page analysis rendering against nullable backend arrays and
+  prevented stale detail responses from overwriting a newer selected job
+
+### Version bump
+
+- Version bumped to 1.2.6
+
 ## v1.2.5
 
 ### Features

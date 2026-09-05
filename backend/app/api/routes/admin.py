@@ -42,6 +42,10 @@ def _get_user_or_404(db: Session, user_id: str) -> User:
     return user
 
 
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 @router.get("/")
 def list_users(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """List all users (admin only)."""
@@ -52,12 +56,13 @@ def list_users(admin: User = Depends(get_current_admin), db: Session = Depends(g
 @router.post("/")
 def create_user(data: AdminCreateUser, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """Create a new user (admin only)."""
-    existing = db.query(User).filter(User.email == data.email).first()
+    email = normalize_email(data.email)
+    existing = db.query(User).filter(func.lower(User.email) == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email already exists")
 
     user = User(
-        email=data.email,
+        email=email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         is_admin=data.is_admin,

@@ -427,7 +427,7 @@ def fetch_job_from_url(url: str) -> str:
             "Accept-Language": "en-US,en;q=0.9",
         }
         try:
-            with httpx.Client(timeout=30, follow_redirects=False) as client:
+            with httpx.Client(timeout=30, follow_redirects=False, trust_env=False) as client:
                 for _ in range(6):
                     _validate_url_target(current)
                     resp = client.get(current, headers=headers)
@@ -436,6 +436,7 @@ def fetch_job_from_url(url: str) -> str:
                         if not location:
                             raise ValueError("Redirect response without a Location header")
                         current = str(httpx.URL(current).join(location))
+                        _validate_url_target(current)
                         continue
                     resp.raise_for_status()
                     break
@@ -449,11 +450,6 @@ def fetch_job_from_url(url: str) -> str:
             continue
 
         cleaned = _clean_page_text(resp.text)
-
-        if len(cleaned) < 100:
-            rendered = _fetch_with_playwright(current)
-            if len(rendered) > len(cleaned):
-                cleaned = rendered
 
         if len(cleaned) >= 100:
             return cleaned[:16000]

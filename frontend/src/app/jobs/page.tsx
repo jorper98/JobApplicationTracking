@@ -31,9 +31,9 @@ interface Analysis {
   job_id: string;
   resume_id: string;
   match_score: number | null;
-  matching_skills: string[];
-  missing_skills: string[];
-  resume_suggestions: string[];
+  matching_skills: string[] | null;
+  missing_skills: string[] | null;
+  resume_suggestions: string[] | null;
   cover_letter: string | null;
   created_at: string;
 }
@@ -87,6 +87,15 @@ function SkillPills({ skills, tone }: { skills: string[]; tone: "green" | "red" 
   );
 }
 
+function normalizeAnalysis(analysis: Analysis): Analysis {
+  return {
+    ...analysis,
+    matching_skills: analysis.matching_skills || [],
+    missing_skills: analysis.missing_skills || [],
+    resume_suggestions: analysis.resume_suggestions || [],
+  };
+}
+
 function JobsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -120,6 +129,7 @@ function JobsContent() {
   const [noteText, setNoteText] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
   const [analysesMap, setAnalysesMap] = useState<Record<string, Analysis>>({});
+  const selectedJobRequestRef = useRef<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [generatingCLId, setGeneratingCLId] = useState<string | null>(null);
   const [tracking, setTracking] = useState(false);
@@ -334,6 +344,7 @@ function JobsContent() {
   };
 
   const handleSelectJob = async (job: Job) => {
+    selectedJobRequestRef.current = job.id;
     setSelectedJob(job);
     setJobNotes([]);
     setNotesLoading(true);
@@ -345,17 +356,20 @@ function JobsContent() {
         api.getAnalysisForJob(job.id),
         api.getJobRelationships(job.id),
       ]);
+      if (selectedJobRequestRef.current !== job.id) return;
       setJobNotes(notes || []);
       setJobRelationships(relationships || { company: null, contacts: [], related_jobs: [], notes: [] });
       const map: Record<string, Analysis> = {};
       (analyses || []).forEach((a: Analysis) => {
-        map[a.resume_id] = a;
+        map[a.resume_id] = normalizeAnalysis(a);
       });
       setAnalysesMap(map);
       setActiveTab("notes");
     } catch (e) {
+      if (selectedJobRequestRef.current !== job.id) return;
       console.error("Failed to load job detail", e);
     } finally {
+      if (selectedJobRequestRef.current !== job.id) return;
       setNotesLoading(false);
     }
   };
@@ -365,7 +379,7 @@ function JobsContent() {
     setAnalyzingId(resumeId);
     try {
       const result = await api.analyzeMatch(selectedJob.id, resumeId);
-      setAnalysesMap((prev) => ({ ...prev, [resumeId]: result }));
+      setAnalysesMap((prev) => ({ ...prev, [resumeId]: normalizeAnalysis(result) }));
     } catch (e: any) {
       alert(e?.response?.data?.detail || "Analysis failed - make sure you have a resume uploaded");
     } finally {
@@ -532,6 +546,9 @@ function JobsContent() {
 
   const drawerResume = drawerResumeId ? resumes.find((r) => r.id === drawerResumeId) : null;
   const drawerAnalysis = drawerResumeId ? analysesMap[drawerResumeId] : null;
+  const drawerMatchingSkills = drawerAnalysis?.matching_skills || [];
+  const drawerMissingSkills = drawerAnalysis?.missing_skills || [];
+  const drawerResumeSuggestions = drawerAnalysis?.resume_suggestions || [];
 
   const clResume = coverLetterResumeId ? resumes.find((r) => r.id === coverLetterResumeId) : null;
   const clAnalysis = coverLetterResumeId ? analysesMap[coverLetterResumeId] : null;
@@ -1334,9 +1351,9 @@ function JobsContent() {
 
                   <div>
                     <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-2">Matching Skills</p>
-                    {drawerAnalysis.matching_skills.length > 0 ? (
+                    {drawerMatchingSkills.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
-                        {drawerAnalysis.matching_skills.map((s) => (
+                        {drawerMatchingSkills.map((s) => (
                           <span key={s} className="text-xs bg-green-500/15 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
                             {s}
                           </span>
@@ -1349,9 +1366,9 @@ function JobsContent() {
 
                   <div>
                     <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2">Missing Skills</p>
-                    {drawerAnalysis.missing_skills.length > 0 ? (
+                    {drawerMissingSkills.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
-                        {drawerAnalysis.missing_skills.map((s) => (
+                        {drawerMissingSkills.map((s) => (
                           <span key={s} className="text-xs bg-red-500/15 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
                             {s}
                           </span>
@@ -1364,9 +1381,9 @@ function JobsContent() {
 
                   <div>
                     <p className="text-xs font-semibold text-gray-700 dark:text-[#c0c0c8] mb-2">Resume Suggestions</p>
-                    {drawerAnalysis.resume_suggestions.length > 0 ? (
+                    {drawerResumeSuggestions.length > 0 ? (
                       <ul className="space-y-2">
-                        {drawerAnalysis.resume_suggestions.map((s, i) => (
+                        {drawerResumeSuggestions.map((s, i) => (
                           <li key={i} className="text-sm text-gray-700 dark:text-[#c0c0c8] flex gap-2">
                             <span className="text-indigo-500 shrink-0">{i + 1}.</span>
                             <span>{s}</span>
