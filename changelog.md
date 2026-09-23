@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.2.10
+
+### Refactoring
+
+- Split monolithic `main.py` startup logic (450 lines) into dedicated startup modules:
+  - `app/startup/migrations.py` — schema compatibility checks, enum additions, legacy data migrations
+  - `app/startup/bootstrap.py` — admin user creation on fresh install
+  - `app/startup/indexes.py` — FK indexes and unique constraints
+  - `app/startup/backfills.py` — data backfills (saved applications, company records)
+- Improved maintainability and testability of startup initialization
+
+### Version bump
+
+- Version bumped to 1.2.10
+
 ## v1.2.9
 
 ### Features
