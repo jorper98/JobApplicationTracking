@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.2.9
+
+### Features
+
+- Centralized note storage behind a shared `notes` table for job, company, and
+  contact notes while leaving legacy note tables in place for compatibility
+- Added centralized note mentions so note tags consistently point to jobs,
+  companies, or contacts without being treated as direct relationships
+- Added generic `/api/notes` CRUD routes and switched frontend note API calls to
+  use the shared note endpoint
+
+### Migration and data
+
+- Existing job, company, and contact notes are migrated into centralized notes on
+  startup with legacy source IDs to prevent duplicate migrations
+- Existing contact note tags are migrated into centralized note mentions
+- Export, import, system backup, system restore, and clear-data flows now include
+  centralized notes and note mentions while retaining legacy note payloads
+
+### Version bump
+
+- Version bumped to 1.2.9
+
 ## v1.2.8
 
 ### Features

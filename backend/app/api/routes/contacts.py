@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Company, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, Job, User
+from app.models.models import Company, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, Job, Note, NoteMention, User
 from app.schemas.schemas import (
     ContactCreate,
     ContactUpdate,
@@ -41,10 +41,10 @@ def _get_owned_job(db: Session, user: User, job_id: str):
     return job
 
 
-def _contact_note_count(db: Session, contact_id: str) -> int:
+def _contact_note_count(db: Session, user_id: str, contact_id: str) -> int:
     return (
-        db.query(func.count(ContactNote.id))
-        .filter(ContactNote.contact_id == contact_id)
+        db.query(func.count(Note.id))
+        .filter(Note.user_id == user_id, Note.entity_type == "contact", Note.entity_id == contact_id)
         .scalar()
         or 0
     )
@@ -125,9 +125,9 @@ def list_contacts(
     if not contacts:
         return []
     note_counts = dict(
-        db.query(ContactNote.contact_id, func.count(ContactNote.id))
-        .filter(ContactNote.contact_id.in_([c.id for c in contacts]))
-        .group_by(ContactNote.contact_id)
+        db.query(Note.entity_id, func.count(Note.id))
+        .filter(Note.user_id == user.id, Note.entity_type == "contact", Note.entity_id.in_([c.id for c in contacts]))
+        .group_by(Note.entity_id)
         .all()
     )
     return [_contact_to_response(db, c, note_counts.get(c.id, 0)) for c in contacts]
@@ -137,7 +137,7 @@ def list_contacts(
 def get_contact(contact_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get a single contact."""
     contact = _get_owned_contact(db, user, contact_id)
-    return _contact_to_response(db, contact, _contact_note_count(db, contact.id))
+    return _contact_to_response(db, contact, _contact_note_count(db, user.id, contact.id))
 
 
 @router.post("/", response_model=ContactResponse)
@@ -157,7 +157,7 @@ def create_contact(
     log_activity(db, user.id, "created", "contact", contact.id, contact.name)
     db.commit()
     db.refresh(contact)
-    return _contact_to_response(db, contact, _contact_note_count(db, contact.id))
+    return _contact_to_response(db, contact, _contact_note_count(db, user.id, contact.id))
 
 
 @router.patch("/{contact_id}", response_model=ContactResponse)
@@ -179,13 +179,18 @@ def update_contact(
     log_activity(db, user.id, "updated", "contact", contact.id, contact.name)
     db.commit()
     db.refresh(contact)
-    return _contact_to_response(db, contact, _contact_note_count(db, contact.id))
+    return _contact_to_response(db, contact, _contact_note_count(db, user.id, contact.id))
 
 
 @router.delete("/{contact_id}")
 def delete_contact(contact_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a contact and its notes/relationships."""
     contact = _get_owned_contact(db, user, contact_id)
+    note_ids = [n.id for n in db.query(Note.id).filter(Note.user_id == user.id, Note.entity_type == "contact", Note.entity_id == contact_id).all()]
+    if note_ids:
+        db.query(NoteMention).filter(NoteMention.note_id.in_(note_ids)).delete(synchronize_session=False)
+    db.query(Note).filter(Note.user_id == user.id, Note.entity_type == "contact", Note.entity_id == contact_id).delete(synchronize_session=False)
+    db.query(NoteMention).filter(NoteMention.entity_type == "contact", NoteMention.entity_id == contact_id).delete(synchronize_session=False)
     # Remove the reverse side of any contact-to-contact links pointing here.
     db.query(ContactContact).filter(ContactContact.related_contact_id == contact_id).delete(
         synchronize_session=False
@@ -325,12 +330,12 @@ def list_contact_notes(
     """List all notes for a contact, including tags."""
     contact = _get_owned_contact(db, user, contact_id)
     notes = (
-        db.query(ContactNote)
-        .filter(ContactNote.contact_id == contact.id)
-        .order_by(ContactNote.created_at.desc())
+        db.query(Note)
+        .filter(Note.user_id == user.id, Note.entity_type == "contact", Note.entity_id == contact.id)
+        .order_by(Note.created_at.desc())
         .all()
     )
-    all_tags = db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_([n.id for n in notes])).all() if notes else []
+    all_tags = db.query(NoteMention).filter(NoteMention.note_id.in_([n.id for n in notes])).all() if notes else []
     tags_by_note: dict = {}
     for tag in all_tags:
         tags_by_note.setdefault(tag.note_id, []).append(tag)
@@ -339,7 +344,7 @@ def list_contact_notes(
         tags = _note_tags_to_response(db, user, tags_by_note.get(note.id, []))
         result.append(ContactNoteResponse(
             id=note.id,
-            contact_id=note.contact_id,
+            contact_id=note.entity_id,
             note=note.note,
             created_at=note.created_at,
             tags=tags,
@@ -361,11 +366,11 @@ def create_contact_note(
     tags_payload = note_data.tags or []
     if tags_payload:
         _validate_tags(db, user, tags_payload)
-    note = ContactNote(contact_id=contact.id, note=note_data.note.strip())
+    note = Note(user_id=user.id, entity_type="contact", entity_id=contact.id, note=note_data.note.strip())
     db.add(note)
     db.flush()
     for tag in tags_payload:
-        db.add(ContactNoteTag(
+        db.add(NoteMention(
             note_id=note.id,
             entity_type=tag["entity_type"],
             entity_id=tag["entity_id"],
@@ -373,10 +378,10 @@ def create_contact_note(
     log_activity(db, user.id, "created", "note", note.id, f"Note on {contact.name}", details=note_data.note.strip()[:120])
     db.commit()
     db.refresh(note)
-    tags = db.query(ContactNoteTag).filter(ContactNoteTag.note_id == note.id).all()
+    tags = db.query(NoteMention).filter(NoteMention.note_id == note.id).all()
     return ContactNoteResponse(
         id=note.id,
-        contact_id=note.contact_id,
+        contact_id=note.entity_id,
         note=note.note,
         created_at=note.created_at,
         tags=_note_tags_to_response(db, user, tags),
@@ -394,8 +399,8 @@ def update_contact_note(
     """Update a contact note and optionally its tags."""
     contact = _get_owned_contact(db, user, contact_id)
     note = (
-        db.query(ContactNote)
-        .filter(ContactNote.id == note_id, ContactNote.contact_id == contact.id)
+        db.query(Note)
+        .filter(Note.id == note_id, Note.user_id == user.id, Note.entity_type == "contact", Note.entity_id == contact.id)
         .first()
     )
     if not note:
@@ -405,9 +410,9 @@ def update_contact_note(
         note.created_at = note_data.created_at
     if note_data.tags is not None:
         _validate_tags(db, user, note_data.tags)
-        db.query(ContactNoteTag).filter(ContactNoteTag.note_id == note.id).delete()
+        db.query(NoteMention).filter(NoteMention.note_id == note.id).delete()
         for tag in note_data.tags:
-            db.add(ContactNoteTag(
+            db.add(NoteMention(
                 note_id=note.id,
                 entity_type=tag["entity_type"],
                 entity_id=tag["entity_id"],
@@ -415,10 +420,10 @@ def update_contact_note(
     log_activity(db, user.id, "updated", "note", note.id, f"Note on {contact.name}")
     db.commit()
     db.refresh(note)
-    tags = db.query(ContactNoteTag).filter(ContactNoteTag.note_id == note.id).all()
+    tags = db.query(NoteMention).filter(NoteMention.note_id == note.id).all()
     return ContactNoteResponse(
         id=note.id,
-        contact_id=note.contact_id,
+        contact_id=note.entity_id,
         note=note.note,
         created_at=note.created_at,
         tags=_note_tags_to_response(db, user, tags),
@@ -435,8 +440,8 @@ def delete_contact_note(
     """Delete a contact note."""
     contact = _get_owned_contact(db, user, contact_id)
     note = (
-        db.query(ContactNote)
-        .filter(ContactNote.id == note_id, ContactNote.contact_id == contact.id)
+        db.query(Note)
+        .filter(Note.id == note_id, Note.user_id == user.id, Note.entity_type == "contact", Note.entity_id == contact.id)
         .first()
     )
     if not note:

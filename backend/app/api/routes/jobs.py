@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Company, Contact, ContactJob, ContactNote, ContactNoteTag, Job, JobAnalysis, JobJob, JobNote, ApplicationStatus, User
+from app.models.models import Company, Contact, ContactJob, ContactNote, ContactNoteTag, Job, JobAnalysis, JobJob, JobNote, Note, NoteMention, ApplicationStatus, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
 from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text, track_usage
 from app.api.routes.companies import get_or_create_company
@@ -146,9 +146,9 @@ def list_jobs(
     if not jobs:
         return []
     note_counts = dict(
-        db.query(JobNote.job_id, func.count(JobNote.id))
-        .filter(JobNote.job_id.in_([j.id for j in jobs]))
-        .group_by(JobNote.job_id)
+        db.query(Note.entity_id, func.count(Note.id))
+        .filter(Note.user_id == user.id, Note.entity_type == "job", Note.entity_id.in_([j.id for j in jobs]))
+        .group_by(Note.entity_id)
         .all()
     )
     return [_job_to_response(job, note_counts.get(job.id, 0)) for job in jobs]
@@ -159,7 +159,7 @@ def get_job(job_id: str, user: User = Depends(get_current_user), db: Session = D
     """Get a specific job."""
     job = _get_owned_job(db, user, job_id)
     note_count = (
-        db.query(func.count(JobNote.id)).filter(JobNote.job_id == job.id).scalar() or 0
+        db.query(func.count(Note.id)).filter(Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job.id).scalar() or 0
     )
     return _job_to_response(job, note_count)
 
@@ -204,6 +204,11 @@ def update_job(job_id: str, job_data: JobUpdate, user: User = Depends(get_curren
 def delete_job(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a job and all linked notes, analyses, and applications."""
     job = _get_owned_job(db, user, job_id)
+    note_ids = [n.id for n in db.query(Note.id).filter(Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job_id).all()]
+    if note_ids:
+        db.query(NoteMention).filter(NoteMention.note_id.in_(note_ids)).delete(synchronize_session=False)
+    db.query(Note).filter(Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job_id).delete(synchronize_session=False)
+    db.query(NoteMention).filter(NoteMention.entity_type == "job", NoteMention.entity_id == job_id).delete(synchronize_session=False)
 
     log_activity(db, user.id, "deleted", "job", job.id, job.title)
     db.delete(job)
@@ -214,40 +219,48 @@ def delete_job(job_id: str, user: User = Depends(get_current_user), db: Session 
 @router.get("/{job_id}/notes", response_model=List[JobNoteResponse])
 def list_job_notes(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _get_owned_job(db, user, job_id)
-    return db.query(JobNote).filter(JobNote.job_id == job_id).order_by(JobNote.created_at.desc()).all()
+    return [
+        {"id": note.id, "job_id": note.entity_id, "note": note.note, "created_at": note.created_at}
+        for note in db.query(Note)
+        .filter(Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job_id)
+        .order_by(Note.created_at.desc())
+        .all()
+    ]
 
 
 @router.post("/{job_id}/notes", response_model=JobNoteResponse)
 def create_job_note(job_id: str, note_data: JobNoteCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     job = _get_owned_job(db, user, job_id)
 
-    job_note = JobNote(job_id=job_id, note=note_data.note)
+    if not note_data.note.strip():
+        raise HTTPException(status_code=400, detail="Note cannot be empty")
+    job_note = Note(user_id=user.id, entity_type="job", entity_id=job_id, note=note_data.note.strip())
     db.add(job_note)
     log_activity(db, user.id, "created", "note", job_note.id, f"Note on {job.title}", details=note_data.note.strip()[:120])
     db.commit()
     db.refresh(job_note)
-    return job_note
+    return {"id": job_note.id, "job_id": job_note.entity_id, "note": job_note.note, "created_at": job_note.created_at}
 
 
 @router.patch("/{job_id}/notes/{note_id}", response_model=JobNoteResponse)
 def update_job_note(job_id: str, note_id: str, note_data: JobNoteUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     job = _get_owned_job(db, user, job_id)
-    note = db.query(JobNote).filter(JobNote.id == note_id, JobNote.job_id == job_id).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
-    note.note = note_data.note
+    note.note = note_data.note.strip()
     if note_data.created_at is not None:
         note.created_at = note_data.created_at
     log_activity(db, user.id, "updated", "note", note.id, f"Note on {job.title}")
     db.commit()
     db.refresh(note)
-    return note
+    return {"id": note.id, "job_id": note.entity_id, "note": note.note, "created_at": note.created_at}
 
 
 @router.delete("/{job_id}/notes/{note_id}")
 def delete_job_note(job_id: str, note_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     job = _get_owned_job(db, user, job_id)
-    note = db.query(JobNote).filter(JobNote.id == note_id, JobNote.job_id == job_id).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     log_activity(db, user.id, "deleted", "note", note.id, f"Note on {job.title}")
@@ -442,29 +455,29 @@ def get_job_relationships(
         .all()
     )
     own_notes = (
-        db.query(JobNote)
-        .filter(JobNote.job_id == job.id)
-        .order_by(JobNote.created_at.desc())
+        db.query(Note)
+        .filter(Note.user_id == user.id, Note.entity_type == "job", Note.entity_id == job.id)
+        .order_by(Note.created_at.desc())
         .all()
     )
     tagged_notes = (
-        db.query(ContactNote)
-        .join(ContactNoteTag, ContactNoteTag.note_id == ContactNote.id)
-        .join(Contact, Contact.id == ContactNote.contact_id)
+        db.query(Note)
+        .join(NoteMention, NoteMention.note_id == Note.id)
         .filter(
-            ContactNoteTag.entity_type == "job",
-            ContactNoteTag.entity_id == job.id,
-            Contact.user_id == user.id,
+            Note.user_id == user.id,
+            NoteMention.entity_type == "job",
+            NoteMention.entity_id == job.id,
+            ~((Note.entity_type == "job") & (Note.entity_id == job.id)),
         )
         .all()
     )
-    contact_ids = {n.contact_id for n in tagged_notes}
+    contact_ids = {n.entity_id for n in tagged_notes if n.entity_type == "contact"}
     contacts_by_id = {
         c.id: c
         for c in db.query(Contact).filter(Contact.id.in_(contact_ids)).all()
     } if contact_ids else {}
     tag_rows = (
-        db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_([n.id for n in tagged_notes])).all()
+        db.query(NoteMention).filter(NoteMention.note_id.in_([n.id for n in tagged_notes])).all()
         if tagged_notes else []
     )
     tags_by_note: dict = {}
@@ -496,7 +509,7 @@ def get_job_relationships(
         for n in own_notes
     ]
     for n in tagged_notes:
-        contact = contacts_by_id.get(n.contact_id)
+        contact = contacts_by_id.get(n.entity_id) if n.entity_type == "contact" else None
         tags = []
         for tag in tags_by_note.get(n.id, []):
             name = None
@@ -516,7 +529,7 @@ def get_job_relationships(
             "id": n.id,
             "note": n.note,
             "created_at": n.created_at.isoformat() if n.created_at else None,
-            "source": "contact",
+            "source": n.entity_type,
             "contact_id": contact.id if contact else None,
             "contact_name": contact.name if contact else None,
             "tags": tags,

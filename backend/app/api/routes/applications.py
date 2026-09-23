@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Application, Job, JobAnalysis, JobNote, Resume, User, ApplicationStatus
+from app.models.models import Application, Job, JobAnalysis, Note, Resume, User, ApplicationStatus
 from app.schemas.schemas import ApplicationCreate, ApplicationUpdate, ApplicationResponse
 from app.core.auth import get_current_user
 from app.core.activity import log_activity
@@ -122,8 +122,9 @@ def get_kanban(user: User = Depends(get_current_user), db: Session = Depends(get
     )
 
     note_counts = dict(
-        db.query(JobNote.job_id, func.count(JobNote.id))
-        .group_by(JobNote.job_id)
+        db.query(Note.entity_id, func.count(Note.id))
+        .filter(Note.user_id == user.id, Note.entity_type == "job")
+        .group_by(Note.entity_id)
         .all()
     )
 

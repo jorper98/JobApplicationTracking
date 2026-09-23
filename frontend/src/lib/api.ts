@@ -183,28 +183,48 @@ export const api = {
     const { data } = await client.delete(`/api/jobs/${id}`);
     return data;
   },
-  listJobNotes: async (jobId: string) => {
-    const { data } = await client.get(`/api/jobs/${jobId}/notes`);
+  listNotes: async (entityType: string, entityId: string) => {
+    const { data } = await client.get("/api/notes/", {
+      params: { entity_type: entityType, entity_id: entityId },
+    });
     return data;
+  },
+  createNote: async (entityType: string, entityId: string, note: string, mentions?: { entity_type: string; entity_id: string }[]) => {
+    const { data } = await client.post("/api/notes/", {
+      entity_type: entityType,
+      entity_id: entityId,
+      note,
+      ...(mentions ? { mentions } : {}),
+    });
+    return data;
+  },
+  updateNote: async (noteId: string, note: string, opts?: { mentions?: { entity_type: string; entity_id: string }[]; createdAt?: string }) => {
+    const { data } = await client.patch(`/api/notes/${noteId}`, {
+      note,
+      ...(opts?.mentions !== undefined ? { mentions: opts.mentions } : {}),
+      ...(opts?.createdAt ? { created_at: opts.createdAt } : {}),
+    });
+    return data;
+  },
+  deleteNote: async (noteId: string) => {
+    const { data } = await client.delete(`/api/notes/${noteId}`);
+    return data;
+  },
+  listJobNotes: async (jobId: string) => {
+    return api.listNotes("job", jobId);
   },
   getJob: async (id: string) => {
     const { data } = await client.get(`/api/jobs/${id}`);
     return data;
   },
   createJobNote: async (jobId: string, note: string) => {
-    const { data } = await client.post(`/api/jobs/${jobId}/notes`, { note });
-    return data;
+    return api.createNote("job", jobId, note);
   },
   updateJobNote: async (jobId: string, noteId: string, note: string, createdAt?: string) => {
-    const { data } = await client.patch(`/api/jobs/${jobId}/notes/${noteId}`, {
-      note,
-      ...(createdAt ? { created_at: createdAt } : {}),
-    });
-    return data;
+    return api.updateNote(noteId, note, createdAt ? { createdAt } : undefined);
   },
   deleteJobNote: async (jobId: string, noteId: string) => {
-    const { data } = await client.delete(`/api/jobs/${jobId}/notes/${noteId}`);
-    return data;
+    return api.deleteNote(noteId);
   },
   listJobContacts: async (jobId: string) => {
     const { data } = await client.get(`/api/jobs/${jobId}/contacts`);
@@ -243,20 +263,16 @@ export const api = {
     return data;
   },
   listCompanyNotes: async (companyId: string) => {
-    const { data } = await client.get(`/api/companies/${companyId}/notes`);
-    return data;
+    return api.listNotes("company", companyId);
   },
   createCompanyNote: async (companyId: string, note: string) => {
-    const { data } = await client.post(`/api/companies/${companyId}/notes`, { note });
-    return data;
+    return api.createNote("company", companyId, note);
   },
   updateCompanyNote: async (companyId: string, noteId: string, note: string) => {
-    const { data } = await client.patch(`/api/companies/${companyId}/notes/${noteId}`, { note });
-    return data;
+    return api.updateNote(noteId, note);
   },
   deleteCompanyNote: async (companyId: string, noteId: string) => {
-    const { data } = await client.delete(`/api/companies/${companyId}/notes/${noteId}`);
-    return data;
+    return api.deleteNote(noteId);
   },
   listCompanyContacts: async (companyId: string) => {
     const { data } = await client.get(`/api/companies/${companyId}/contacts`);
@@ -307,19 +323,14 @@ export const api = {
     return data;
   },
   listContactNotes: async (contactId: string) => {
-    const { data } = await client.get(`/api/contacts/${contactId}/notes`);
-    return data;
+    return api.listNotes("contact", contactId);
   },
   createContactNote: async (
     contactId: string,
     note: string,
     tags?: { entity_type: string; entity_id: string }[]
   ) => {
-    const { data } = await client.post(`/api/contacts/${contactId}/notes`, {
-      note,
-      ...(tags ? { tags } : {}),
-    });
-    return data;
+    return api.createNote("contact", contactId, note, tags);
   },
   updateContactNote: async (
     contactId: string,
@@ -327,16 +338,13 @@ export const api = {
     note: string,
     opts?: { tags?: { entity_type: string; entity_id: string }[]; createdAt?: string }
   ) => {
-    const { data } = await client.patch(`/api/contacts/${contactId}/notes/${noteId}`, {
-      note,
-      ...(opts?.tags !== undefined ? { tags: opts.tags } : {}),
-      ...(opts?.createdAt ? { created_at: opts.createdAt } : {}),
+    return api.updateNote(noteId, note, {
+      ...(opts?.tags !== undefined ? { mentions: opts.tags } : {}),
+      ...(opts?.createdAt ? { createdAt: opts.createdAt } : {}),
     });
-    return data;
   },
   deleteContactNote: async (contactId: string, noteId: string) => {
-    const { data } = await client.delete(`/api/contacts/${contactId}/notes/${noteId}`);
-    return data;
+    return api.deleteNote(noteId);
   },
 
   exportData: async () => {

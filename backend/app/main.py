@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text, func
 from app.core.config import settings
-from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies, contacts, activity
+from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies, contacts, activity, notes
 from app.db.database import engine, Base
 from app.models import models  # ensures all models are registered with Base
 
@@ -10,7 +10,7 @@ _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.2.8",
+    version="1.2.9",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -181,6 +181,8 @@ def on_startup():
                 "CREATE INDEX IF NOT EXISTS ix_contacts_user_id ON contacts (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_notes_contact_id ON contact_notes (contact_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_note_tags_note_id ON contact_note_tags (note_id)",
+                "CREATE INDEX IF NOT EXISTS ix_notes_user_entity ON notes (user_id, entity_type, entity_id)",
+                "CREATE INDEX IF NOT EXISTS ix_note_mentions_note_id ON note_mentions (note_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_companies_contact_id ON contact_companies (contact_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_jobs_contact_id ON contact_jobs (contact_id)",
                 "CREATE INDEX IF NOT EXISTS ix_contact_contacts_contact_id ON contact_contacts (contact_id)",
@@ -328,6 +330,83 @@ def on_startup():
                     db.close()
     except Exception as exc:
         print("Company notes migration setup failed:", exc)
+    # Migrate entity-specific note tables into the centralized notes model.
+    # Legacy tables remain for old backups and rollback compatibility.
+    try:
+        from app.db.database import SessionLocal
+        from app.models.models import CompanyNote, ContactNote, ContactNoteTag, JobNote, Note, NoteMention
+        db = SessionLocal()
+        try:
+            migrated = 0
+            for job_note in db.query(JobNote).join(models.Job, models.Job.id == JobNote.job_id).all():
+                exists = db.query(Note.id).filter(Note.legacy_source == "job_notes", Note.legacy_id == job_note.id).first()
+                if not exists and job_note.job and job_note.job.user_id:
+                    db.add(Note(
+                        user_id=job_note.job.user_id,
+                        entity_type="job",
+                        entity_id=job_note.job_id,
+                        note=job_note.note,
+                        legacy_source="job_notes",
+                        legacy_id=job_note.id,
+                        created_at=job_note.created_at,
+                    ))
+                    migrated += 1
+            for company_note in db.query(CompanyNote).join(models.Company, models.Company.id == CompanyNote.company_id).all():
+                exists = db.query(Note.id).filter(Note.legacy_source == "company_notes", Note.legacy_id == company_note.id).first()
+                if not exists and company_note.company and company_note.company.user_id:
+                    db.add(Note(
+                        user_id=company_note.company.user_id,
+                        entity_type="company",
+                        entity_id=company_note.company_id,
+                        note=company_note.note,
+                        legacy_source="company_notes",
+                        legacy_id=company_note.id,
+                        created_at=company_note.created_at,
+                    ))
+                    migrated += 1
+            contact_notes = db.query(ContactNote).join(models.Contact, models.Contact.id == ContactNote.contact_id).all()
+            for contact_note in contact_notes:
+                exists = db.query(Note.id).filter(Note.legacy_source == "contact_notes", Note.legacy_id == contact_note.id).first()
+                if not exists and contact_note.contact and contact_note.contact.user_id:
+                    db.add(Note(
+                        user_id=contact_note.contact.user_id,
+                        entity_type="contact",
+                        entity_id=contact_note.contact_id,
+                        note=contact_note.note,
+                        legacy_source="contact_notes",
+                        legacy_id=contact_note.id,
+                        created_at=contact_note.created_at,
+                    ))
+                    migrated += 1
+            db.flush()
+            contact_note_map = {
+                note.legacy_id: note.id
+                for note in db.query(Note).filter(Note.legacy_source == "contact_notes").all()
+                if note.legacy_id
+            }
+            for tag in db.query(ContactNoteTag).all():
+                note_id = contact_note_map.get(tag.note_id)
+                if not note_id:
+                    continue
+                exists = db.query(NoteMention.id).filter(
+                    NoteMention.note_id == note_id,
+                    NoteMention.entity_type == tag.entity_type,
+                    NoteMention.entity_id == tag.entity_id,
+                ).first()
+                if not exists:
+                    db.add(NoteMention(note_id=note_id, entity_type=tag.entity_type, entity_id=tag.entity_id))
+            if migrated:
+                db.commit()
+                print(f"Centralized notes migration complete: {migrated} note(s) migrated")
+            else:
+                db.rollback()
+        except Exception as exc:
+            db.rollback()
+            print("Centralized notes migration failed:", exc)
+        finally:
+            db.close()
+    except Exception as exc:
+        print("Centralized notes migration setup failed:", exc)
 
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
@@ -337,6 +416,7 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(applications.router, prefix="/api/applications", tags=["Applications"])
 app.include_router(companies.router, prefix="/api/companies", tags=["Companies"])
 app.include_router(contacts.router, prefix="/api/contacts", tags=["Contacts"])
+app.include_router(notes.router, prefix="/api/notes", tags=["Notes"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(data.router, prefix="/api/data", tags=["Data"])
 app.include_router(activity.router, prefix="/api/activity", tags=["Activity"])

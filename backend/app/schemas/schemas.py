@@ -193,6 +193,54 @@ class ContactNoteResponse(BaseModel):
         from_attributes = True
 
 
+class NoteMentionPayload(BaseModel):
+    entity_type: str
+    entity_id: str
+
+
+class NoteMentionResponse(BaseModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    entity_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NoteCreate(BaseModel):
+    entity_type: str
+    entity_id: str
+    note: str = Field(min_length=1)
+    mentions: Optional[List[NoteMentionPayload]] = None
+    tags: Optional[List[NoteMentionPayload]] = None
+
+
+class NoteUpdate(BaseModel):
+    note: str = Field(min_length=1)
+    created_at: Optional[datetime] = None
+    mentions: Optional[List[NoteMentionPayload]] = None
+    tags: Optional[List[NoteMentionPayload]] = None
+
+
+class NoteResponse(BaseModel):
+    id: str
+    user_id: str
+    entity_type: str
+    entity_id: str
+    note: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    mentions: List[NoteMentionResponse] = []
+    tags: List[NoteMentionResponse] = []
+    job_id: Optional[str] = None
+    company_id: Optional[str] = None
+    contact_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ── Analysis ──────────────────────────────────────────────────────────────────
 
 class AnalysisRequest(BaseModel):

@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import User, Resume, Job, Application, ApplicationStatus, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, JobJob, ActivityLog
+from app.models.models import User, Resume, Job, Application, ApplicationStatus, JobAnalysis, JobNote, Company, CompanyNote, AIUsage, Contact, ContactNote, ContactNoteTag, ContactCompany, ContactJob, ContactContact, JobJob, ActivityLog, Note, NoteMention
 from app.core.activity import log_activity
 from app.core.config import settings
 from app.core.auth import get_current_user, get_current_admin
@@ -36,6 +36,8 @@ REQUIRED_FIELDS = {
     "notes": ["id", "job_id", "note"],
     "contact_notes": ["id", "contact_id", "note"],
     "contact_note_tags": ["id", "note_id", "entity_type", "entity_id"],
+    "centralized_notes": ["id", "user_id", "entity_type", "entity_id", "note"],
+    "note_mentions": ["id", "note_id", "entity_type", "entity_id"],
 }
 
 
@@ -161,6 +163,9 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
     contact_note_tags = (
         db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(contact_note_ids)).all() if contact_note_ids else []
     )
+    centralized_notes = db.query(Note).filter(Note.user_id == user.id).all()
+    centralized_note_ids = [note.id for note in centralized_notes]
+    note_mentions = db.query(NoteMention).filter(NoteMention.note_id.in_(centralized_note_ids)).all() if centralized_note_ids else []
     contact_companies = (
         db.query(ContactCompany).filter(ContactCompany.contact_id.in_(contact_ids)).all() if contact_ids else []
     )
@@ -192,6 +197,8 @@ def export_data(user: User = Depends(get_current_user), db: Session = Depends(ge
         "notes": [serialize_model(note) for note in notes],
         "contact_notes": [serialize_model(note) for note in contact_notes],
         "contact_note_tags": [serialize_model(tag) for tag in contact_note_tags],
+        "centralized_notes": [serialize_model(note) for note in centralized_notes],
+        "note_mentions": [serialize_model(mention) for mention in note_mentions],
     }
 
     buffer = io.BytesIO()
@@ -280,6 +287,10 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
     # 5. Replace the current user's data in a single transaction
     try:
         contact_ids = [contact_id for (contact_id,) in db.query(Contact.id).filter(Contact.user_id == user.id).all()]
+        user_note_ids = [note_id for (note_id,) in db.query(Note.id).filter(Note.user_id == user.id).all()]
+        if user_note_ids:
+            db.query(NoteMention).filter(NoteMention.note_id.in_(user_note_ids)).delete(synchronize_session=False)
+        db.query(Note).filter(Note.user_id == user.id).delete(synchronize_session=False)
         if contact_ids:
             db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(db.query(ContactNote.id).filter(ContactNote.contact_id.in_(contact_ids)))).delete(synchronize_session=False)
             db.query(ContactNote).filter(ContactNote.contact_id.in_(contact_ids)).delete()
@@ -304,6 +315,7 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         db.query(Company).filter(Company.user_id == user.id).delete()
         db.query(ActivityLog).filter(ActivityLog.user_id == user.id).delete()
         db.flush()
+        has_centralized_notes = bool(payload.get("centralized_notes"))
 
         # Companies first so jobs can be linked by name. Every imported row gets
         # a fresh id so a backup can be restored into any account without
@@ -327,6 +339,16 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             data["id"] = str(uuid.uuid4())
             data["company_id"] = company_id_map.get(data.get("company_id"))
             db.add(CompanyNote(**data))
+            if not has_centralized_notes and data.get("company_id"):
+                db.add(Note(
+                    user_id=user.id,
+                    entity_type="company",
+                    entity_id=data["company_id"],
+                    note=data.get("note") or "",
+                    legacy_source="company_notes",
+                    legacy_id=data["id"],
+                    created_at=data.get("created_at"),
+                ))
 
         job_id_map = {}
         for row in payload.get("jobs", []):
@@ -375,6 +397,7 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
         db.flush()
 
         contact_note_id_map = {}
+        legacy_contact_note_to_central_note = {}
         for row in payload.get("contact_notes", []):
             sanitized = sanitize_row(row)
             new_id = str(uuid.uuid4())
@@ -383,7 +406,21 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             data["id"] = new_id
             data["contact_id"] = contact_id_map.get(data.get("contact_id"))
             db.add(ContactNote(**data))
+            if not has_centralized_notes and data.get("contact_id"):
+                central_id = str(uuid.uuid4())
+                legacy_contact_note_to_central_note[sanitized.get("id")] = central_id
+                db.add(Note(
+                    id=central_id,
+                    user_id=user.id,
+                    entity_type="contact",
+                    entity_id=data["contact_id"],
+                    note=data.get("note") or "",
+                    legacy_source="contact_notes",
+                    legacy_id=data["id"],
+                    created_at=data.get("created_at"),
+                ))
         for row in payload.get("contact_note_tags", []):
+            old_note_id = row.get("note_id")
             data = filter_columns(ContactNoteTag, sanitize_row(row))
             data["id"] = str(uuid.uuid4())
             data["note_id"] = contact_note_id_map.get(data.get("note_id"))
@@ -396,6 +433,41 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             elif entity_type == "contact":
                 data["entity_id"] = contact_id_map.get(entity_id)
             db.add(ContactNoteTag(**data))
+            central_note_id = legacy_contact_note_to_central_note.get(old_note_id)
+            if not has_centralized_notes and central_note_id and data.get("entity_id"):
+                db.add(NoteMention(note_id=central_note_id, entity_type=entity_type, entity_id=data["entity_id"]))
+        centralized_note_id_map = {}
+        for row in payload.get("centralized_notes", []):
+            sanitized = sanitize_row(row)
+            old_id = sanitized.get("id")
+            new_id = str(uuid.uuid4())
+            centralized_note_id_map[old_id] = new_id
+            data = filter_columns(Note, sanitized)
+            data["id"] = new_id
+            data["user_id"] = user.id
+            entity_type = data.get("entity_type")
+            if entity_type == "job":
+                data["entity_id"] = job_id_map.get(data.get("entity_id"))
+            elif entity_type == "company":
+                data["entity_id"] = company_id_map.get(data.get("entity_id"))
+            elif entity_type == "contact":
+                data["entity_id"] = contact_id_map.get(data.get("entity_id"))
+            if data.get("entity_id"):
+                db.add(Note(**data))
+        for row in payload.get("note_mentions", []):
+            data = filter_columns(NoteMention, sanitize_row(row))
+            data["id"] = str(uuid.uuid4())
+            data["note_id"] = centralized_note_id_map.get(data.get("note_id"))
+            entity_type = data.get("entity_type")
+            entity_id = data.get("entity_id")
+            if entity_type == "job":
+                data["entity_id"] = job_id_map.get(entity_id)
+            elif entity_type == "company":
+                data["entity_id"] = company_id_map.get(entity_id)
+            elif entity_type == "contact":
+                data["entity_id"] = contact_id_map.get(entity_id)
+            if data.get("note_id") and data.get("entity_id"):
+                db.add(NoteMention(**data))
         for row in payload.get("analyses", []):
             data = filter_columns(JobAnalysis, sanitize_row(row))
             data["id"] = str(uuid.uuid4())
@@ -408,6 +480,16 @@ async def import_data(file: UploadFile = File(...), user: User = Depends(get_cur
             data["id"] = str(uuid.uuid4())
             data["job_id"] = job_id_map.get(data.get("job_id"))
             db.add(JobNote(**data))
+            if not has_centralized_notes and data.get("job_id"):
+                db.add(Note(
+                    user_id=user.id,
+                    entity_type="job",
+                    entity_id=data["job_id"],
+                    note=data.get("note") or "",
+                    legacy_source="job_notes",
+                    legacy_id=data["id"],
+                    created_at=data.get("created_at"),
+                ))
 
         for row in payload.get("applications", []):
             data = {**filter_columns(Application, sanitize_row(row)), "user_id": user.id}
@@ -452,6 +534,8 @@ def system_backup(admin: User = Depends(get_current_admin), db: Session = Depend
         n.id
         for n in db.query(ContactNote.id).filter(ContactNote.contact_id.in_(contact_ids)).all()
     ] if contact_ids else []
+    all_notes = db.query(Note).filter(Note.user_id.in_(user_ids)).all() if user_ids else []
+    all_note_ids = [n.id for n in all_notes]
     payload = {
         "users": [serialize_model(u) for u in users],
         "companies": [serialize_model(c) for c in companies],
@@ -482,6 +566,8 @@ def system_backup(admin: User = Depends(get_current_admin), db: Session = Depend
             serialize_model(r)
             for r in db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_(contact_note_ids_of)).all()
         ] if contact_note_ids_of else [],
+        "centralized_notes": [serialize_model(n) for n in all_notes],
+        "note_mentions": [serialize_model(m) for m in db.query(NoteMention).filter(NoteMention.note_id.in_(all_note_ids)).all()] if all_note_ids else [],
         "job_jobs": [serialize_model(r) for r in db.query(JobJob).filter(JobJob.job_id.in_(job_ids)).all()] if job_ids else [],
         "ai_usage": [serialize_model(r) for r in db.query(AIUsage).filter(AIUsage.user_id.in_(user_ids)).all()] if user_ids else [],
     }
@@ -567,6 +653,8 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
 
     # 2. Replace ALL data in a single transaction
     try:
+        db.query(NoteMention).delete()
+        db.query(Note).delete()
         db.query(ContactNoteTag).delete()
         db.query(ContactNote).delete()
         db.query(ContactCompany).delete()
@@ -624,6 +712,7 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
         for row in payload.get("contacts", []):
             db.add(Contact(**filter_columns(Contact, sanitize_row(row))))
         db.flush()
+        contacts_by_id = {c.id: c for c in db.query(Contact).all()}
 
         for row in payload.get("contact_companies", []):
             db.add(ContactCompany(**filter_columns(ContactCompany, sanitize_row(row))))
@@ -639,6 +728,63 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
             db.add(ContactNote(**filter_columns(ContactNote, sanitize_row(row))))
         for row in payload.get("contact_note_tags", []):
             db.add(ContactNoteTag(**filter_columns(ContactNoteTag, sanitize_row(row))))
+        for row in payload.get("centralized_notes", []):
+            db.add(Note(**filter_columns(Note, sanitize_row(row))))
+        for row in payload.get("note_mentions", []):
+            db.add(NoteMention(**filter_columns(NoteMention, sanitize_row(row))))
+        if not payload.get("centralized_notes"):
+            legacy_contact_note_to_central_note = {}
+            for row in payload.get("company_notes", []):
+                data = sanitize_row(row)
+                company = companies_by_id.get(data.get("company_id"))
+                if company:
+                    db.add(Note(
+                        user_id=company.user_id,
+                        entity_type="company",
+                        entity_id=company.id,
+                        note=data.get("note") or "",
+                        legacy_source="company_notes",
+                        legacy_id=data.get("id"),
+                        created_at=data.get("created_at"),
+                    ))
+            for row in payload.get("notes", []):
+                data = sanitize_row(row)
+                job = db.query(Job).filter(Job.id == data.get("job_id")).first()
+                if job and job.user_id:
+                    db.add(Note(
+                        user_id=job.user_id,
+                        entity_type="job",
+                        entity_id=job.id,
+                        note=data.get("note") or "",
+                        legacy_source="job_notes",
+                        legacy_id=data.get("id"),
+                        created_at=data.get("created_at"),
+                    ))
+            for row in payload.get("contact_notes", []):
+                data = sanitize_row(row)
+                contact = contacts_by_id.get(data.get("contact_id"))
+                if contact:
+                    central_id = str(uuid.uuid4())
+                    legacy_contact_note_to_central_note[data.get("id")] = central_id
+                    db.add(Note(
+                        id=central_id,
+                        user_id=contact.user_id,
+                        entity_type="contact",
+                        entity_id=contact.id,
+                        note=data.get("note") or "",
+                        legacy_source="contact_notes",
+                        legacy_id=data.get("id"),
+                        created_at=data.get("created_at"),
+                    ))
+            for row in payload.get("contact_note_tags", []):
+                data = sanitize_row(row)
+                note_id = legacy_contact_note_to_central_note.get(data.get("note_id"))
+                if note_id:
+                    db.add(NoteMention(
+                        note_id=note_id,
+                        entity_type=data.get("entity_type"),
+                        entity_id=data.get("entity_id"),
+                    ))
         for row in payload.get("analyses", []):
             db.add(JobAnalysis(**filter_columns(JobAnalysis, sanitize_row(row))))
         for row in payload.get("notes", []):
@@ -670,6 +816,10 @@ async def system_restore(file: UploadFile = File(...), admin: User = Depends(get
 def clear_data(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete ALL of the current user's data and uploaded resume files."""
     contact_ids = [contact_id for (contact_id,) in db.query(Contact.id).filter(Contact.user_id == user.id).all()]
+    user_note_ids = [note_id for (note_id,) in db.query(Note.id).filter(Note.user_id == user.id).all()]
+    if user_note_ids:
+        db.query(NoteMention).filter(NoteMention.note_id.in_(user_note_ids)).delete(synchronize_session=False)
+    db.query(Note).filter(Note.user_id == user.id).delete(synchronize_session=False)
     if contact_ids:
         contact_note_ids_clear = [
             nid

@@ -179,6 +179,33 @@ class ContactNoteTag(Base):
     note = relationship("ContactNote", back_populates="tags")
 
 
+class Note(Base):
+    __tablename__ = "notes"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    entity_type = Column(String, nullable=False, index=True)  # 'job', 'company', 'contact'
+    entity_id = Column(String, nullable=False, index=True)
+    note = Column(Text, nullable=False)
+    legacy_source = Column(String, nullable=True, index=True)
+    legacy_id = Column(String, nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    mentions = relationship("NoteMention", back_populates="note", cascade="all, delete-orphan")
+
+
+class NoteMention(Base):
+    __tablename__ = "note_mentions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    note_id = Column(String, ForeignKey("notes.id"), nullable=False, index=True)
+    entity_type = Column(String, nullable=False, index=True)  # 'job', 'company', 'contact'
+    entity_id = Column(String, nullable=False, index=True)
+
+    note = relationship("Note", back_populates="mentions")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

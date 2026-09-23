@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.models import Company, CompanyNote, Contact, ContactCompany, ContactNote, ContactNoteTag, Job, User
+from app.models.models import Company, CompanyNote, Contact, ContactCompany, ContactNote, ContactNoteTag, Job, Note, NoteMention, User
 from app.schemas.schemas import (
     CompanyCreate,
     CompanyUpdate,
@@ -55,8 +55,9 @@ def _with_job_count(db: Session, user: User, companies: List[Company]) -> List[C
         .all()
     )
     note_counts = dict(
-        db.query(CompanyNote.company_id, func.count(CompanyNote.id))
-        .group_by(CompanyNote.company_id)
+        db.query(Note.entity_id, func.count(Note.id))
+        .filter(Note.user_id == user.id, Note.entity_type == "company")
+        .group_by(Note.entity_id)
         .all()
     )
     return [
@@ -139,6 +140,11 @@ def update_company(
 def delete_company(company_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a company. Jobs keep their company name but lose the link."""
     company = _get_owned_company(db, user, company_id)
+    note_ids = [n.id for n in db.query(Note.id).filter(Note.user_id == user.id, Note.entity_type == "company", Note.entity_id == company_id).all()]
+    if note_ids:
+        db.query(NoteMention).filter(NoteMention.note_id.in_(note_ids)).delete(synchronize_session=False)
+    db.query(Note).filter(Note.user_id == user.id, Note.entity_type == "company", Note.entity_id == company_id).delete(synchronize_session=False)
+    db.query(NoteMention).filter(NoteMention.entity_type == "company", NoteMention.entity_id == company_id).delete(synchronize_session=False)
     log_activity(db, user.id, "deleted", "company", company.id, company.name)
     db.query(Job).filter(Job.company_id == company_id, Job.user_id == user.id).update({Job.company_id: None})
     db.delete(company)
@@ -154,12 +160,13 @@ def list_company_notes(
 ):
     """List all notes for a company."""
     company = _get_owned_company(db, user, company_id)
-    return (
-        db.query(CompanyNote)
-        .filter(CompanyNote.company_id == company.id)
-        .order_by(CompanyNote.created_at.desc())
+    return [
+        {"id": note.id, "company_id": note.entity_id, "note": note.note, "created_at": note.created_at}
+        for note in db.query(Note)
+        .filter(Note.user_id == user.id, Note.entity_type == "company", Note.entity_id == company.id)
+        .order_by(Note.created_at.desc())
         .all()
-    )
+    ]
 
 
 @router.post("/{company_id}/notes", response_model=CompanyNoteResponse)
@@ -173,12 +180,12 @@ def create_company_note(
     company = _get_owned_company(db, user, company_id)
     if not note_data.note.strip():
         raise HTTPException(status_code=400, detail="Note cannot be empty")
-    note = CompanyNote(company_id=company.id, note=note_data.note.strip())
+    note = Note(user_id=user.id, entity_type="company", entity_id=company.id, note=note_data.note.strip())
     db.add(note)
     log_activity(db, user.id, "created", "note", note.id, f"Note on {company.name}", details=note_data.note.strip()[:120])
     db.commit()
     db.refresh(note)
-    return note
+    return {"id": note.id, "company_id": note.entity_id, "note": note.note, "created_at": note.created_at}
 
 
 @router.patch("/{company_id}/notes/{note_id}", response_model=CompanyNoteResponse)
@@ -192,8 +199,8 @@ def update_company_note(
     """Update a company note."""
     company = _get_owned_company(db, user, company_id)
     note = (
-        db.query(CompanyNote)
-        .filter(CompanyNote.id == note_id, CompanyNote.company_id == company.id)
+        db.query(Note)
+        .filter(Note.id == note_id, Note.user_id == user.id, Note.entity_type == "company", Note.entity_id == company.id)
         .first()
     )
     if not note:
@@ -204,7 +211,7 @@ def update_company_note(
     log_activity(db, user.id, "updated", "note", note.id, f"Note on {company.name}")
     db.commit()
     db.refresh(note)
-    return note
+    return {"id": note.id, "company_id": note.entity_id, "note": note.note, "created_at": note.created_at}
 
 
 @router.delete("/{company_id}/notes/{note_id}")
@@ -217,8 +224,8 @@ def delete_company_note(
     """Delete a company note."""
     company = _get_owned_company(db, user, company_id)
     note = (
-        db.query(CompanyNote)
-        .filter(CompanyNote.id == note_id, CompanyNote.company_id == company.id)
+        db.query(Note)
+        .filter(Note.id == note_id, Note.user_id == user.id, Note.entity_type == "company", Note.entity_id == company.id)
         .first()
     )
     if not note:
@@ -274,29 +281,29 @@ def get_company_relationships(
         .all()
     )
     own_notes = (
-        db.query(CompanyNote)
-        .filter(CompanyNote.company_id == company.id)
-        .order_by(CompanyNote.created_at.desc())
+        db.query(Note)
+        .filter(Note.user_id == user.id, Note.entity_type == "company", Note.entity_id == company.id)
+        .order_by(Note.created_at.desc())
         .all()
     )
     tagged_notes = (
-        db.query(ContactNote)
-        .join(ContactNoteTag, ContactNoteTag.note_id == ContactNote.id)
-        .join(Contact, Contact.id == ContactNote.contact_id)
+        db.query(Note)
+        .join(NoteMention, NoteMention.note_id == Note.id)
         .filter(
-            ContactNoteTag.entity_type == "company",
-            ContactNoteTag.entity_id == company.id,
-            Contact.user_id == user.id,
+            Note.user_id == user.id,
+            NoteMention.entity_type == "company",
+            NoteMention.entity_id == company.id,
+            ~((Note.entity_type == "company") & (Note.entity_id == company.id)),
         )
         .all()
     )
-    contact_ids = {n.contact_id for n in tagged_notes}
+    contact_ids = {n.entity_id for n in tagged_notes if n.entity_type == "contact"}
     contacts_by_id = {
         c.id: c
         for c in db.query(Contact).filter(Contact.id.in_(contact_ids)).all()
     } if contact_ids else {}
     tag_rows = (
-        db.query(ContactNoteTag).filter(ContactNoteTag.note_id.in_([n.id for n in tagged_notes])).all()
+        db.query(NoteMention).filter(NoteMention.note_id.in_([n.id for n in tagged_notes])).all()
         if tagged_notes else []
     )
     tags_by_note: dict = {}
@@ -328,7 +335,7 @@ def get_company_relationships(
         for n in own_notes
     ]
     for n in tagged_notes:
-        contact = contacts_by_id.get(n.contact_id)
+        contact = contacts_by_id.get(n.entity_id) if n.entity_type == "contact" else None
         tags = []
         for tag in tags_by_note.get(n.id, []):
             name = None
@@ -348,7 +355,7 @@ def get_company_relationships(
             "id": n.id,
             "note": n.note,
             "created_at": n.created_at.isoformat() if n.created_at else None,
-            "source": "contact",
+            "source": n.entity_type,
             "contact_id": contact.id if contact else None,
             "contact_name": contact.name if contact else None,
             "tags": tags,

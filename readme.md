@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.8-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.2.9-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -129,7 +129,7 @@ Rebuild the zip after editing `data.json` (Python 3.10+): `python sample_data/bu
 
 ## API Documentation
 
-Interactive API docs: http://localhost:8138/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), jobs (`/api/jobs/*`), companies (`/api/companies/*`), contacts (`/api/contacts/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
+Interactive API docs: http://localhost:8138/docs (local dev only — disabled by default in production for security; set `SHOW_API_DOCS=true` in `.env.prod` to enable, see the [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)). Key groups: auth (`/api/auth/*`), notes (`/api/notes/*`), jobs (`/api/jobs/*`), companies (`/api/companies/*`), contacts (`/api/contacts/*`), analysis (`/api/analysis/*`), kanban (`/api/applications/kanban`), data export/import (`/api/data/*`).
 
 ## Development
 
@@ -219,5 +219,5 @@ has been refactored for better readability and maintainability.
 
 ---
 
-**Version:** 1.2.8
+**Version:** 1.2.9
 **Last Updated:** 2026-09-05
