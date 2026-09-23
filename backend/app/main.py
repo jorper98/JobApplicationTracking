@@ -2,20 +2,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.routes import auth, admin, resume, jobs, applications, analysis, data, companies, contacts, activity, notes
-from app.db.database import engine, Base
+from app.db.database import engine
 from app.models import models  # ensures all models are registered with Base
 from app.startup import (
-    run_schema_migrations,
-    bootstrap_admin,
-    create_indexes,
     run_backfills,
+    bootstrap_admin,
 )
 
 _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.2.10",
+    version="1.2.11",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -32,16 +30,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
-    # Run schema migrations (idempotent)
-    run_schema_migrations()
-
-    # Create tables that don't exist yet
-    Base.metadata.create_all(bind=engine)
-
-    # Create indexes and unique constraints
-    create_indexes()
-
-    # Run data backfills
+    # Run data backfills (data migrations, not schema)
     run_backfills()
 
     # Bootstrap admin user on fresh install

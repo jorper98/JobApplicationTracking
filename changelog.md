@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.2.11
+
+### Infrastructure
+
+- Adopted Alembic for database schema versioning and migrations
+- Created initial migration (`8c061375c9cc`) with all tables, indexes, enums, and constraints
+- Removed manual schema migration logic from startup (now handled by Alembic)
+- Removed `Base.metadata.create_all()` from startup — tables created via migrations
+- Added `alembic.ini`, `alembic/env.py`, and migration template
+- Schema changes now version-controlled and repeatable across environments
+
+### Refactoring
+
+- Removed `app/startup/migrations.py` and `app/startup/indexes.py` (replaced by Alembic)
+- Kept `app/startup/backfills.py` and `app/startup/bootstrap.py` for data migrations and admin bootstrap
+- Moved `Base` to `app/db/base.py` to avoid engine creation at import time
+
+### Version bump
+
+- Version bumped to 1.2.11
+
 ## v1.2.10
 
 ### Refactoring
