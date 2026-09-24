@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.13
+
+### Refactoring
+
+- Extracted version to shared `version.json` as single source of truth
+- Frontend reads version at build time via `next.config.mjs` → `NEXT_PUBLIC_APP_VERSION`
+- Backend reads version at startup from `version.json` for FastAPI version
+- Header, Footer, and API docs now auto-sync — no more manual version bumps across files
+
+### Version bump
+
+- Version bumped to 1.2.13
+
 ## v1.2.12
 
 ### Features
