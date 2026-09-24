@@ -24,6 +24,7 @@ const ALLOWED_LOGIN_TAGS = new Set([
 ]);
 
 const ALLOWED_LOGIN_ATTRS = new Set(["class", "href", "rel", "target", "title"]);
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 
 function sanitizeLoginHtml(html: string) {
   if (typeof window === "undefined" || !html.trim()) return "";
@@ -118,7 +119,7 @@ export default function LoginPage() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.2.9</span>
+          <span className="text-xs text-slate-300">v{appVersion}</span>
         </Link>
       </header>
 
@@ -126,7 +127,7 @@ export default function LoginPage() {
         <section className="bg-gray-100 dark:bg-[#0a0a0f] flex items-start justify-center p-10">
           <div className="w-full max-w-sm space-y-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white text-center">JobApplicationTracker</h1>
-            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v1.2.9</p>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] text-center -mt-4">v{appVersion}</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>

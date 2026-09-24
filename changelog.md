@@ -5,7 +5,18 @@
 ### Bug fixes
 
 - Fixed login page version display: now reads version from `NEXT_PUBLIC_APP_VERSION` env var instead of hardcoded `v1.2.9`
+- Fixed forgot password, register, reset password, and verify email pages to read version from `NEXT_PUBLIC_APP_VERSION` instead of hardcoded `v1.2.9`
 - Login page header and body now show dynamic version
+
+### Deployment
+
+- Fixed local frontend Docker build context so the dev image can copy the root `version.json` during `docker compose up --build`
+- Added a root `.dockerignore` for the dev frontend build context to exclude env files, logs, caches, and dependency/build directories
+- Added root `docker-compose.prod.example.yml` so the production Compose example is tracked in GitHub while `distribution/` remains ignored
+- Added root `deploy/env.prod.example` so the production env template is tracked in GitHub while real `.env` files remain user-managed
+- Sanitized production env template domain placeholders to `jobtracker.domain.com`
+- Updated production compose example fallback `APP_VERSION` to `1.2.15`
+- Documented that `distribution/` is generated release output and is intentionally ignored by git
 
 ### Version bump
 

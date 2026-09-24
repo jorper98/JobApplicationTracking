@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { api } from "@/lib/api";
 
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
@@ -40,7 +42,7 @@ function ResetPasswordContent() {
       <header className="bg-slate-700 text-white text-center py-4">
         <Link href="/login" className="inline-flex items-baseline gap-2">
           <span className="text-lg font-semibold">JobApplicationTracker</span>
-          <span className="text-xs text-slate-300">v1.2.9</span>
+          <span className="text-xs text-slate-300">v{appVersion}</span>
         </Link>
       </header>
 

@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Target, CheckCircle2, XCircle } from "lucide-react";
 
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
@@ -39,7 +41,7 @@ function VerifyEmailContent() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="font-bold text-gray-900 dark:text-white">JobApplicationTracker</span>
-            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.9</span>
+            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v{appVersion}</span>
           </div>
         </div>
 

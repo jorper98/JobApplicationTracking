@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Target, MailCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+
 export default function RegisterPage() {
   const { register } = useAuth();
   const [fullName, setFullName] = useState("");
@@ -41,7 +43,7 @@ export default function RegisterPage() {
             </div>
             <div className="flex flex-col leading-none">
               <span className="font-bold text-gray-900 dark:text-white">JobApplicationTracker</span>
-              <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.9</span>
+              <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v{appVersion}</span>
             </div>
           </div>
 
@@ -75,7 +77,7 @@ export default function RegisterPage() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="font-bold text-gray-900 dark:text-white">JobApplicationTracker</span>
-            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v1.2.9</span>
+            <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5">v{appVersion}</span>
           </div>
         </div>
 

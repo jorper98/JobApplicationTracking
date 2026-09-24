@@ -85,7 +85,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8138
 docker-compose up --build
 ```
 
-> **Note:** The app version is injected at build time via the `APP_VERSION` build arg (default: 1.2.14). To override:
+> **Note:** The app version is injected at build time via the `APP_VERSION` build arg (default: 1.2.15). To override:
 > ```bash
 > APP_VERSION=1.2.15 docker-compose up --build
 > ```
@@ -121,6 +121,11 @@ The Quick Start above runs the app **locally** with hot-reload. To deploy
 on a VPS in production (Docker volumes, HTTPS via reverse proxy, backups,
 admin system backup/restore), follow the
 [Production Deployment Guide](PRODUCTION_DEPLOYMENT_GUIDE.md).
+
+The production Compose template is tracked at `docker-compose.prod.example.yml`,
+and the production env template is tracked at `deploy/env.prod.example`. Copy
+them to `docker-compose.prod.yml` and `deploy/.env.prod` on the server, then
+fill in server-specific secrets.
 
 ## Sample Data
 
@@ -168,6 +173,10 @@ and password reset emails.
 Docker Compose reads the root `.env` file for host port mappings. The checked-in
 `.env.example` shows the default sequential ports starting at frontend port
 `8137`; `backend/.env` and `frontend/.env` remain application-specific.
+
+The dev frontend image uses the repository root as its build context so it can
+copy the shared root `version.json`; `frontend/Dockerfile` copies application
+files from `frontend/` within that context.
 
 ### Backend only
 
@@ -224,5 +233,5 @@ has been refactored for better readability and maintainability.
 
 ---
 
-**Version:** 1.2.9
-**Last Updated:** 2026-09-05
+**Version:** 1.2.15
+**Last Updated:** 2026-09-24

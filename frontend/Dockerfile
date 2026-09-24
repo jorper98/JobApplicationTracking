@@ -12,10 +12,10 @@ RUN if [ -f version.json ]; then \
     fi
 ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
 
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm install
 
-COPY . .
+COPY frontend/. .
 
 EXPOSE 8137
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "8137"]

@@ -70,10 +70,19 @@ Output: `distribution/jobtracker-distribution-v{version}.zip` containing:
 backend/                      # app code + Dockerfile.prod
 frontend/                     # source + Dockerfile.prod
 docker-compose.prod.example.yml
-deploy/.env.prod.example
+deploy/env.prod.example
 ```
 
 No build artifacts, no git history, no secrets.
+
+The source-controlled production Compose template lives at the repository root:
+`docker-compose.prod.example.yml`. The source-controlled production env template
+lives at `deploy/env.prod.example`. The generated release package includes these
+templates for first-time installs.
+
+The local `distribution/` folder is generated release output and is ignored by
+git. Keep production compose examples there as local packaging artifacts and
+generate a new zip when those deployment files change.
 
 ---
 
@@ -85,14 +94,14 @@ SFTP the zip to the server, then:
 unzip jobtracker-distribution-v1.1.9.zip -d /docker/jobtracker
 cd /docker/jobtracker
 ls -la              # confirm docker-compose.prod.example.yml is present
-ls -la deploy/      # confirm .env.prod.example is present
+ls -la deploy/      # confirm env.prod.example is present
 ```
 
 Create the compose file and env file (first install only):
 
 ```bash
 cp -n docker-compose.prod.example.yml docker-compose.prod.yml
-cp -n deploy/.env.prod.example deploy/.env.prod
+cp -n deploy/env.prod.example deploy/.env.prod
 ```
 
 Fill in real secrets:
@@ -211,7 +220,7 @@ Because those files are preserved, new settings shipped by an upgrade are
 If you prefer, copy the new example templates over your files and re-enter
 your values:
 `cp docker-compose.prod.example.yml docker-compose.prod.yml` and
-`cp deploy/.env.prod.example deploy/.env.prod` (then fill in secrets).
+`cp deploy/env.prod.example deploy/.env.prod` (then fill in secrets).
 
 Existing users and sessions are unaffected by the upgrade: the `verified`
 column is added with a default of true (existing accounts stay verified),
