@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.15
+
+### Bug fixes
+
+- Fixed login page version display: now reads version from `NEXT_PUBLIC_APP_VERSION` env var instead of hardcoded `v1.2.9`
+- Login page header and body now show dynamic version
+
+### Version bump
+
+- Version bumped to 1.2.15
+
 ## v1.2.14
 
 ### Testing

@@ -9,6 +9,10 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/app/.ms-playwright
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && playwright install --with-deps chromium
 
+# Copy alembic for migrations
+COPY alembic ./alembic
+COPY alembic.ini .
+
 COPY . .
 
 RUN mkdir -p uploads && chown -R 10001:10001 /app
