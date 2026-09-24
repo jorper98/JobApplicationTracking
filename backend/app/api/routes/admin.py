@@ -385,6 +385,40 @@ def update_welcome_settings(
     return {"welcome_modal_title": title, "welcome_modal_html": data.welcome_modal_html}
 
 
+class AIModelPricingResponse(BaseModel):
+    pricing: dict[str, list[float]]
+
+
+class AIModelPricingUpdate(BaseModel):
+    pricing: dict[str, list[float]]
+
+
+@router.get("/settings/ai-pricing", response_model=AIModelPricingResponse)
+def get_ai_model_pricing(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Return the AI model pricing configuration (admin only)."""
+    from app.services.ai_service import _load_pricing_from_settings
+    pricing = _load_pricing_from_settings()
+    return {"pricing": {k: [v[0], v[1]] for k, v in pricing.items()}}
+
+
+@router.put("/settings/ai-pricing", response_model=AIModelPricingResponse)
+def update_ai_model_pricing(
+    data: AIModelPricingUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Persist AI model pricing overrides and apply them immediately (admin only)."""
+    import json
+    _set_setting(db, "ai_model_pricing", json.dumps(data.pricing))
+    db.commit()
+    from app.services.ai_service import _pricing_cache
+    import app.services.ai_service as ai_service_module
+    ai_service_module._pricing_cache = None
+    from app.services.ai_service import _load_pricing_from_settings
+    pricing = _load_pricing_from_settings()
+    return {"pricing": {k: [v[0], v[1]] for k, v in pricing.items()}}
+
+
 @router.get("/usage")
 def get_ai_usage(
     user_id: str | None = Query(None, description="Filter by user id"),

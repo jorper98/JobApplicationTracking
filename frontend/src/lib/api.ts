@@ -75,6 +75,15 @@ export const api = {
     const { data } = await client.put("/api/users/settings/ai", payload);
     return data;
   },
+  // Admin: AI model pricing
+  getAIModelPricing: async () => {
+    const { data } = await client.get("/api/users/settings/ai-pricing");
+    return data;
+  },
+  updateAIModelPricing: async (pricing: Record<string, number[]>) => {
+    const { data } = await client.put("/api/users/settings/ai-pricing", { pricing });
+    return data;
+  },
   // Admin: SMTP settings
   getSmtpSettings: async () => {
     const { data } = await client.get("/api/users/settings/smtp");

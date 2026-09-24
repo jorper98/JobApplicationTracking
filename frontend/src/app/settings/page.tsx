@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader, PageShell } from "@/components/PageShell";
-import { Loader2, Save, Send } from "lucide-react";
+import { Loader2, Save, Send, DollarSign } from "lucide-react";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -15,6 +15,9 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [keySet, setKeySet] = useState(false);
   const [clearKey, setClearKey] = useState(false);
+
+  // AI model pricing
+  const [pricingText, setPricingText] = useState("");
 
   // SMTP settings
   const [smtpHost, setSmtpHost] = useState("");
@@ -36,24 +39,28 @@ export default function SettingsPage() {
   const [welcomeHtml, setWelcomeHtml] = useState("");
 
   const [savingAi, setSavingAi] = useState(false);
+  const [savingPricing, setSavingPricing] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [savingLoginPage, setSavingLoginPage] = useState(false);
   const [savingWelcome, setSavingWelcome] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [pricingMessage, setPricingMessage] = useState<string | null>(null);
   const [smtpMessage, setSmtpMessage] = useState<string | null>(null);
   const [loginPageMessage, setLoginPageMessage] = useState<string | null>(null);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [aiError, setAiError] = useState("");
+  const [pricingError, setPricingError] = useState("");
   const [smtpError, setSmtpError] = useState("");
   const [loginPageError, setLoginPageError] = useState("");
   const [welcomeError, setWelcomeError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.getAISettings(), api.getSmtpSettings(), api.getLoginPageSettings(), api.getWelcomeSettings()])
-      .then(([ai, smtp, loginPage, welcome]) => {
+    Promise.all([api.getAISettings(), api.getAIModelPricing(), api.getSmtpSettings(), api.getLoginPageSettings(), api.getWelcomeSettings()])
+      .then(([ai, pricing, smtp, loginPage, welcome]) => {
         setModel(ai.gemini_model);
         setKeySet(ai.gemini_api_key_set);
+        setPricingText(JSON.stringify(pricing.pricing, null, 2));
         setSmtpHost(smtp.smtp_host);
         setSmtpPort(smtp.smtp_port);
         setSmtpUser(smtp.smtp_user);
@@ -116,6 +123,22 @@ export default function SettingsPage() {
       setAiError(e?.response?.data?.detail || "Failed to save AI settings");
     } finally {
       setSavingAi(false);
+    }
+  };
+
+  const handleSavePricing = async () => {
+    setSavingPricing(true);
+    setPricingMessage(null);
+    setPricingError("");
+    try {
+      const parsed = JSON.parse(pricingText);
+      const data = await api.updateAIModelPricing(parsed);
+      setPricingText(JSON.stringify(data.pricing, null, 2));
+      setPricingMessage("AI model pricing saved");
+    } catch (e: any) {
+      setPricingError(e?.response?.data?.detail || "Failed to save pricing (check JSON format)");
+    } finally {
+      setSavingPricing(false);
     }
   };
 
@@ -251,6 +274,59 @@ export default function SettingsPage() {
         >
           <Save className="w-4 h-4" />
           {savingAi ? "Saving..." : "Save AI Settings"}
+        </button>
+      </div>
+
+      {/* AI model pricing */}
+      <div className="rounded-2xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-[#16161f] p-6 space-y-4 mb-6">
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-gray-900 dark:text-white">AI model pricing</h2>
+          <DollarSign className="w-5 h-5 text-gray-400" />
+        </div>
+        <p className="text-xs text-gray-400 dark:text-[#5a5a64]">
+          Estimated USD cost per 1M tokens (input, output) for the admin usage dashboard. Values are used to calculate the
+          cost of each AI call. Leave empty to use built-in defaults.
+        </p>
+
+        <div>
+          <label className="block text-sm text-gray-500 dark:text-[#8b8b96] mb-1">Pricing JSON</label>
+          <textarea
+            value={pricingText}
+            onChange={(e) => setPricingText(e.target.value)}
+            rows={15}
+            spellCheck={false}
+            placeholder={JSON.stringify({
+              "gemini-3.6-flash": [0.30, 2.50],
+              "gemini-3.5-flash": [0.30, 2.50],
+              "gemini-3.5-flash-lite": [0.15, 0.60],
+              "gemini-3.1-flash": [0.30, 2.50],
+              "gemini-3.1-flash-lite": [0.15, 0.60],
+              "gemini-2.5-flash": [0.30, 2.50],
+              "gemini-2.5-flash-lite": [0.15, 0.60],
+              "gemini-2.5-pro": [1.25, 10.00],
+              "gemini-2.0-flash": [0.10, 0.40],
+              "gemini-1.5-flash": [0.075, 0.30],
+              "gemini-1.5-pro": [1.25, 5.00],
+            }, null, 2)}
+            className="w-full bg-gray-50 dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#5a5a64] outline-none focus:border-indigo-500"
+          />
+          <p className="text-xs text-gray-400 dark:text-[#5a5a64] mt-1">
+            Format: <code className="font-mono">"model-name": [input_price_per_1M, output_price_per_1M]</code>. Prices in USD.
+            Unknown models fall back to $1.25 / $10.00 per 1M tokens.
+          </p>
+        </div>
+
+        {pricingMessage && <p className="text-sm text-emerald-600 dark:text-emerald-400">{pricingMessage}</p>}
+        {pricingError && <p className="text-sm text-red-600 dark:text-red-400">{pricingError}</p>}
+
+        <button
+          onClick={handleSavePricing}
+          disabled={savingPricing}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Save className="w-4 h-4" />
+          <DollarSign className="w-4 h-4" />
+          {savingPricing ? "Saving..." : "Save AI Model Pricing"}
         </button>
       </div>
 

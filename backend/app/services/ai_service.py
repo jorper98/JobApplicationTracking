@@ -66,10 +66,38 @@ _MODEL_PRICES: dict[str, tuple[float, float]] = {
 }
 _DEFAULT_PRICE = (1.25, 10.00)
 
+_pricing_cache: dict[str, tuple[float, float]] | None = None
+
+
+def _load_pricing_from_settings() -> dict[str, tuple[float, float]]:
+    """Load model pricing from admin settings, falling back to hardcoded defaults."""
+    global _pricing_cache
+    if _pricing_cache is not None:
+        return _pricing_cache
+    try:
+        from app.db.database import SessionLocal
+        from app.models.models import AppSetting
+        db = SessionLocal()
+        try:
+            row = db.get(AppSetting, "ai_model_pricing")
+            if row and row.value:
+                import json
+                data = json.loads(row.value)
+                # Convert lists back to tuples
+                _pricing_cache = {k: (v[0], v[1]) for k, v in data.items()}
+                return _pricing_cache
+        finally:
+            db.close()
+    except Exception as exc:
+        print("Failed to load AI model pricing from settings:", exc)
+    _pricing_cache = _MODEL_PRICES
+    return _pricing_cache
+
 
 def estimate_cost(model_name: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Estimate the USD cost of a call using the model pricing table."""
-    input_per_m, output_per_m = _MODEL_PRICES.get(_plain_model_name(model_name), _DEFAULT_PRICE)
+    pricing = _load_pricing_from_settings()
+    input_per_m, output_per_m = pricing.get(_plain_model_name(model_name), _DEFAULT_PRICE)
     return round((prompt_tokens / 1_000_000 * input_per_m) + (completion_tokens / 1_000_000 * output_per_m), 6)
 
 

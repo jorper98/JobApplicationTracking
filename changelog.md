@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.12
+
+### Features
+
+- Added AI model pricing configuration in Admin Settings
+  - New `/api/users/settings/ai-pricing` GET/PUT endpoints for managing model pricing
+  - Admin UI with JSON editor for input/output cost per 1M tokens per model
+  - Hardcoded defaults in `ai_service.py` serve as fallback when no override is set
+  - Pricing used for admin AI usage dashboard cost estimation
+
+### Version bump
+
+- Version bumped to 1.2.12
+
 ## v1.2.11
 
 ### Infrastructure
