@@ -8,6 +8,7 @@ import Link from "next/link";
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
+  const version = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 
   return (
     <header className="border-b border-gray-200 bg-white dark:border-white/[0.08] dark:bg-[#0d0d14]">
@@ -21,7 +22,7 @@ export function Header() {
               JobApplicationTracker
             </span>
             <span className="text-[10px] text-gray-400 dark:text-[#6b6b72] mt-0.5 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">
-              v1.2.12
+              v{version}
             </span>
           </div>
         </Link>

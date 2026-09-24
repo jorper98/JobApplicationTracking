@@ -1,3 +1,5 @@
+import json
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -9,11 +11,19 @@ from app.startup import (
     bootstrap_admin,
 )
 
+# Read version from shared version.json
+VERSION_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "version.json")
+try:
+    with open(VERSION_FILE) as f:
+        APP_VERSION = json.load(f).get("version", "unknown")
+except Exception:
+    APP_VERSION = "unknown"
+
 _docs_enabled = settings.docs_enabled
 app = FastAPI(
     title="JobApplicationTracker API",
     description="Track job applications, score matches, generate cover letters",
-    version="1.2.12",
+    version=APP_VERSION,
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
