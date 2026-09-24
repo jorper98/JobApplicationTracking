@@ -9,6 +9,12 @@
 - Component tests for Header, Footer, PageShell (14 tests passing)
 - Test script added to package.json (`npm test`, `npm run test:watch`)
 
+### Bug fixes
+
+- Fixed Docker build: version now injected via build arg (`APP_VERSION`) instead of reading `version.json` from filesystem
+- `next.config.mjs` reads version from `process.env.APP_VERSION` (set via Dockerfile ARG)
+- Prevents "ENOENT: no such file or directory, open '/version.json'" in container
+
 ### Version bump
 
 - Version bumped to 1.2.14

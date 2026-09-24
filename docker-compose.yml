@@ -38,7 +38,10 @@ services:
       - "${MAILPIT_UI_PORT:-8141}:8025"
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        APP_VERSION: ${APP_VERSION:-1.2.14}
     ports:
       - "${FRONTEND_PORT:-8137}:8137"
     environment:
@@ -51,4 +54,3 @@ services:
 
 volumes:
   pgdata:
-

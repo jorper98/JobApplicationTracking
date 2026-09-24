@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.12-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.2.14-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -84,6 +84,11 @@ NEXT_PUBLIC_API_URL=http://localhost:8138
 ```bash
 docker-compose up --build
 ```
+
+> **Note:** The app version is injected at build time via the `APP_VERSION` build arg (default: 1.2.14). To override:
+> ```bash
+> APP_VERSION=1.2.15 docker-compose up --build
+> ```
 
 The application will be available at:
 - **Frontend:** http://localhost:8137
