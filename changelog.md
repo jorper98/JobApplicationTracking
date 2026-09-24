@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.14
+
+### Testing
+
+- Added Jest + React Testing Library for frontend unit tests
+- Test setup: `jest.config.js`, `tsconfig.jest.json`, `jest.setup.ts`
+- Component tests for Header, Footer, PageShell (14 tests passing)
+- Test script added to package.json (`npm test`, `npm run test:watch`)
+
+### Version bump
+
+- Version bumped to 1.2.14
+
 ## v1.2.13
 
 ### Refactoring
