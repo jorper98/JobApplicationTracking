@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { PageHeader, PageLoading, PageShell } from "@/components/PageShell";
-import { GripVertical, Search, Pencil, Eye, ChevronDown, LayoutGrid, Archive } from "lucide-react";
+import { PageLoading, PageShell } from "@/components/PageShell";
+import { GripVertical, Search, Pencil, Eye, ChevronDown, LayoutGrid, Archive, Plus } from "lucide-react";
 import { JobViewModal } from "@/components/JobViewModal";
+import { JobModal } from "@/components/JobModal";
 
 const ACTIVE_COLUMNS = [
   { key: "saved", label: "Saved", color: "#94a3b8" },
@@ -57,6 +58,7 @@ export default function TrackerPage() {
   const [compact, setCompact] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(DEFAULT_COLLAPSED);
   const [viewJob, setViewJob] = useState<{ jobId: string; status: string } | null>(null);
+  const [addJobOpen, setAddJobOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -110,6 +112,11 @@ export default function TrackerPage() {
 
   const totalActive = ACTIVE_COLUMNS.reduce((sum, { key }) => sum + (board[key] || []).length, 0);
   const totalArchive = ARCHIVE_COLUMNS.reduce((sum, { key }) => sum + (board[key] || []).length, 0);
+  const totalApplications = totalActive + totalArchive;
+  const matchingApplications = allColumns.reduce(
+    (sum, { key }) => sum + (board[key] || []).filter(matchesQuery).filter(matchesCompany).length,
+    0
+  );
   const allActiveCollapsed = ACTIVE_COLUMNS.every(({ key }) => collapsed[key]);
   const allArchiveCollapsed = ARCHIVE_COLUMNS.every(({ key }) => collapsed[key]);
 
@@ -163,6 +170,10 @@ export default function TrackerPage() {
   const toggleCollapse = (key: string) =>
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
+  const refreshBoard = () => {
+    api.getKanban().then(setBoard).catch(console.error);
+  };
+
   if (loading) {
     return <PageLoading message="Loading tracker…" />;
   }
@@ -174,19 +185,27 @@ export default function TrackerPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Application Tracker" subtitle="Drag cards between columns to update status" />
-
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-[#5a5a64] pointer-events-none" />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by title, company, location, or notes…"
-            className={inputClass + " w-full pl-10"}
-          />
-        </div>
+      <div className="sticky top-[98px] z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 border-b border-gray-200/80 dark:border-white/[0.08] bg-[#f4f5f7]/95 dark:bg-[#0f0f17]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f4f5f7]/80 dark:supports-[backdrop-filter]:bg-[#0f0f17]/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 shrink-0">
+            <div className="flex items-baseline gap-3">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">Application Tracker</h1>
+              <p className="text-sm text-gray-500 dark:text-[#8b8b96] truncate">
+                {matchingApplications} of {totalApplications} applications
+              </p>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-[#8b8b96]">Drag cards between columns to update status</p>
+          </div>
+          <div className="relative w-full sm:w-[360px] xl:w-[420px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-[#5a5a64] pointer-events-none" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by title, company, location, or notes…"
+              className={inputClass + " w-full pl-10"}
+            />
+          </div>
 
         <select
           value={companyFilter}
@@ -240,7 +259,7 @@ export default function TrackerPage() {
           Archive ({totalArchive})
         </button>
 
-        {(query || companyFilter) && (
+          {(query || companyFilter) && (
           <button
             onClick={() => {
               setQuery("");
@@ -248,9 +267,17 @@ export default function TrackerPage() {
             }}
             className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors"
           >
-            Clear filters
+              Clear filters
+            </button>
+          )}
+          <button
+            onClick={() => setAddJobOpen(true)}
+            className="ml-auto shrink-0 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Job
           </button>
-        )}
+        </div>
       </div>
 
       <div className="flex items-start gap-4 overflow-x-auto pb-4">
@@ -450,6 +477,14 @@ export default function TrackerPage() {
         jobId={viewJob?.jobId ?? null}
         status={viewJob?.status}
         onClose={() => setViewJob(null)}
+      />
+      <JobModal
+        isOpen={addJobOpen}
+        onClose={() => setAddJobOpen(false)}
+        onSave={() => {
+          refreshBoard();
+          setAddJobOpen(false);
+        }}
       />
     </PageShell>
   );

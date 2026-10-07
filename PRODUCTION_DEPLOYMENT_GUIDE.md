@@ -91,7 +91,7 @@ generate a new zip when those deployment files change.
 SFTP the zip to the server, then:
 
 ```bash
-unzip jobtracker-distribution-v1.1.9.zip -d /docker/jobtracker
+unzip jobtracker-distribution-v1.2.16.zip -d /docker/jobtracker
 cd /docker/jobtracker
 ls -la              # confirm docker-compose.prod.example.yml is present
 ls -la deploy/      # confirm env.prod.example is present
@@ -197,7 +197,7 @@ install — only application files are replaced:
 
 ```bash
 cd /docker/jobtracker
-unzip -o jobtracker-distribution-v1.1.9.zip
+unzip -o jobtracker-distribution-v1.2.16.zip
 docker compose --env-file deploy/.env.prod -f docker-compose.prod.yml up -d --build
 ```
 
@@ -206,16 +206,13 @@ Preserved on every upgrade:
 - `deploy/.env.prod` (secrets)
 - `pgdata` and `uploads` volumes (all data)
 
-Because those files are preserved, new settings shipped by an upgrade are
-**not** applied automatically. For v1.1.9, merge these into your live
-`docker-compose.prod.yml` (backend `environment:` block) and `deploy/.env.prod`:
-
-- `docker-compose.prod.yml`: forward the `SMTP_*`, `COOKIE_SECURE`, and
-  `TRUST_PROXY_HEADERS` variables (compare with the newly shipped
-  `docker-compose.prod.example.yml`).
-- `deploy/.env.prod`: add `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/BCC/
-  TLS/SSL`, set `COOKIE_SECURE=true`, and set `TRUST_PROXY_HEADERS=true` if
-  a reverse proxy fronts the API (as in section 6).
+Because those files are preserved, new settings and command changes shipped by
+an upgrade are **not** applied automatically. For v1.2.16, compare your live
+`docker-compose.prod.yml` with the newly shipped `docker-compose.prod.example.yml`
+and make sure the backend command runs `python scripts/run_migrations.py` before
+Uvicorn. The wrapper stamps older pre-Alembic databases when needed, then runs
+`alembic upgrade head` to add new columns such as `jobs.original_description`,
+`jobs.description_fetch_method`, and `companies.description`.
 
 If you prefer, copy the new example templates over your files and re-enter
 your values:

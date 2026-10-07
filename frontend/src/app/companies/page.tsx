@@ -12,6 +12,7 @@ import { Building2, Plus, Pencil, Trash2, Search, X, Briefcase, StickyNote, Send
 interface Company {
   id: string;
   name: string;
+  description?: string | null;
   notes?: string | null;
   job_count?: number;
   note_count?: number;
@@ -56,7 +57,7 @@ const STATUS_BADGE: Record<string, string> = {
   not_pursued: "bg-gray-200 dark:bg-white/[0.05] text-gray-600 dark:text-[#8b8b96]",
 };
 
-const emptyForm = { name: "", notes: "" };
+const emptyForm = { name: "", description: "", notes: "" };
 
 function CompaniesContent() {
   const searchParams = useSearchParams();
@@ -68,12 +69,13 @@ function CompaniesContent() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [listFilter, setListFilter] = useState("");
   const [selected, setSelected] = useState<Company | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("notes");
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ ...emptyForm });
   const [editing, setEditing] = useState<Company | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", notes: "" });
+  const [editForm, setEditForm] = useState({ name: "", description: "", notes: "" });
   const [busy, setBusy] = useState(false);
 
   // Notes
@@ -164,9 +166,19 @@ function CompaniesContent() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return companies;
-    return companies.filter((c) => c.name.toLowerCase().includes(q));
-  }, [companies, search]);
+    return companies.filter((c) => {
+      const matchesSearch = !q || c.name.toLowerCase().includes(q);
+      const matchesFilter =
+        !listFilter ||
+        (listFilter === "with_jobs" && (c.job_count ?? 0) > 0) ||
+        (listFilter === "no_jobs" && (c.job_count ?? 0) === 0) ||
+        (listFilter === "with_notes" && (c.note_count ?? 0) > 0) ||
+        (listFilter === "no_notes" && (c.note_count ?? 0) === 0) ||
+        (listFilter === "with_description" && !!c.description?.trim()) ||
+        (listFilter === "no_description" && !c.description?.trim());
+      return matchesSearch && matchesFilter;
+    });
+  }, [companies, search, listFilter]);
 
   const companyJobs = useMemo(
     () => (selected ? allJobs.filter((j) => j.company_id === selected.id) : []),
@@ -249,6 +261,7 @@ function CompaniesContent() {
     try {
       const created = await api.createCompany({
         name: addForm.name.trim(),
+        description: addForm.description.trim() || undefined,
         notes: addForm.notes.trim() || undefined,
       });
       setMessage(`Company "${created.name}" added.`);
@@ -266,7 +279,7 @@ function CompaniesContent() {
 
   const startEdit = (company: Company) => {
     setEditing(company);
-    setEditForm({ name: company.name, notes: company.notes || "" });
+    setEditForm({ name: company.name, description: company.description || "", notes: company.notes || "" });
     setError("");
     setMessage("");
   };
@@ -279,6 +292,7 @@ function CompaniesContent() {
     try {
       const updated = await api.updateCompany(editing.id, {
         name: editForm.name.trim(),
+        description: editForm.description.trim() || null,
         notes: editForm.notes.trim() || null,
       });
       setMessage("Company updated.");
@@ -459,30 +473,13 @@ function CompaniesContent() {
 
   return (
     <PageShell maxWidth="max-w-[1920px]">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Companies</h1>
-          <p className="text-gray-500 dark:text-[#8b8b96]">{companies.length} companies</p>
-        </div>
-        <button
-          onClick={() => {
-            setShowAdd(true);
-            setError("");
-          }}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Company
-        </button>
-      </div>
-
-      {error && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
-      {message && <p className="mb-4 text-sm text-green-600 dark:text-green-400">{message}</p>}
-
-      <div className="flex flex-col md:flex-row items-start gap-6">
-        {/* Companies list */}
-        <div className="w-full md:w-[380px] md:shrink-0 space-y-2">
-          <div className="relative mb-2">
+      <div className="sticky top-[98px] z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 border-b border-gray-200/80 dark:border-white/[0.08] bg-[#f4f5f7]/95 dark:bg-[#0f0f17]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f4f5f7]/80 dark:supports-[backdrop-filter]:bg-[#0f0f17]/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex items-baseline gap-3 shrink-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white shrink-0">Companies</h1>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] truncate">{filtered.length} of {companies.length} companies</p>
+          </div>
+          <div className="relative w-full sm:w-[320px] xl:w-[380px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#5a5a64]" />
             <input
               type="text"
@@ -492,6 +489,49 @@ function CompaniesContent() {
               className={inputClass + " pl-9"}
             />
           </div>
+          <select
+            value={listFilter}
+            onChange={(e) => setListFilter(e.target.value)}
+            className={inputClass + " cursor-pointer w-full sm:w-[180px]"}
+          >
+            <option value="">All Companies</option>
+            <option value="with_jobs">With Jobs</option>
+            <option value="no_jobs">No Jobs</option>
+            <option value="with_notes">With Notes</option>
+            <option value="no_notes">No Notes</option>
+            <option value="with_description">With Description</option>
+            <option value="no_description">No Description</option>
+          </select>
+          {(search || listFilter) && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setListFilter("");
+              }}
+              className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
+            >
+              Clear filters
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setShowAdd(true);
+              setError("");
+            }}
+            className="ml-auto shrink-0 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Company
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {message && <p className="mb-4 text-sm text-green-600 dark:text-green-400">{message}</p>}
+
+      <div className="flex flex-col md:flex-row items-start gap-6">
+        {/* Companies list */}
+        <div className="w-full md:w-[380px] md:shrink-0 space-y-2">
           {filtered.map((company) => (
             <div
               key={company.id}
@@ -561,6 +601,11 @@ function CompaniesContent() {
                   <p className="text-sm text-gray-500 dark:text-[#8b8b96]">
                     {selected.job_count ?? 0} job{(selected.job_count ?? 0) === 1 ? "" : "s"} tracked
                   </p>
+                  {selected.description && (
+                    <p className="mt-2 max-w-3xl text-sm text-gray-600 dark:text-[#a8a8b3] whitespace-pre-wrap">
+                      {selected.description}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={() => startEdit(selected)} className={smallBtn}>
@@ -869,6 +914,7 @@ function CompaniesContent() {
             </div>
             <div className="p-5 space-y-3">
               <input type="text" placeholder="Company name *" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} className={inputClass} />
+              <textarea rows={3} placeholder="Company description" value={addForm.description} onChange={(e) => setAddForm({ ...addForm, description: e.target.value })} className={inputClass + " resize-none"} />
               <textarea rows={4} placeholder="Notes (contacts, portal details, interview notes...)" value={addForm.notes} onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })} className={inputClass + " resize-none"} />
               <div className="flex gap-3 pt-2">
                 <button onClick={handleAdd} disabled={busy || !addForm.name.trim()} className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
@@ -896,6 +942,7 @@ function CompaniesContent() {
             </div>
             <div className="p-5 space-y-3">
               <input type="text" placeholder="Company name *" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className={inputClass} />
+              <textarea rows={3} placeholder="Company description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className={inputClass + " resize-none"} />
               <textarea rows={5} placeholder="Notes (contacts, portal details, interview notes...)" value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} className={inputClass + " resize-none"} />
               <div className="flex gap-3 pt-2">
                 <button onClick={handleSaveEdit} disabled={busy || !editForm.name.trim()} className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">

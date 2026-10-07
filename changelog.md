@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.2.16
+
+### Features
+
+- Saved the original pasted or URL-fetched job description separately from the AI-cleaned job summary.
+- Added URL description fetch method tracking so imported jobs record whether text came from `httpx` plus the cleanup system or the Playwright fallback.
+- Added company descriptions and auto-filled them from job posting company context when the company description is empty.
+- Exposed company descriptions in the Companies page add/edit forms and detail panel.
+- Added an original job description section in the job view modal.
+- Added AI summary/original posting tabs to the shared job description modal so original postings are visible from the Jobs page and edit dialog.
+- Made the Jobs page title/count, search, filters, and Add Job button a single sticky toolbar while scrolling.
+- Shortened the Jobs toolbar search field so filters and actions stay closer together.
+- Anchored the Jobs sticky toolbar below the main app navigation so it remains visible while scrolling long job lists.
+- Added matching sticky toolbars to Companies and Contacts with title/count, search, clear search, and add actions.
+- Added a matching sticky toolbar to Tracker with title, search, company filter, compact toggle, and column controls.
+- Added toolbar filters for Companies and Contacts, and added an Add Job button to the Tracker toolbar.
+
+### Deployment
+
+- Updated dev and production Compose backend startup commands to run a migration wrapper before Uvicorn so existing pre-Alembic databases are stamped safely before applying new migrations.
+
+### Version bump
+
+- Version bumped to 1.2.16
+
 ## v1.2.15
 
 ### Bug fixes

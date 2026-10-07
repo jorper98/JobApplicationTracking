@@ -1,7 +1,7 @@
 # JobApplicationTracker
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.15-green.svg)](changelog.md)
+[![Version](https://img.shields.io/badge/Version-1.2.16-green.svg)](changelog.md)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
 **AI-powered job application tracker that helps you manage your job search, analyze resume matches, and generate tailored cover letters.**
@@ -15,14 +15,14 @@ JobApplicationTracker is open source and ready for you to use. It is also provid
 ## Features
 
 - **Resume Management** — Upload PDF resumes with automatic AI-powered skill extraction
-- **Job Tracking** — Add jobs manually or scrape from URLs with AI extraction
+- **Job Tracking** — Add jobs manually, import from URLs, or paste posting text with AI extraction; original pasted/fetched postings are preserved alongside AI summaries
 - **Kanban Board** — Drag-and-drop application status tracking (Saved → Applied → Interview → Offer)
 - **AI Match Analysis** — Score resume-to-job matches, identify matching and missing skills
 - **Cover Letter Generation** — Generate personalized cover letters tailored to each job
-- **Companies** — Manage companies with notes, linked jobs, and a Relationships tab
+- **Companies** — Manage companies with descriptions, notes, linked jobs, and a Relationships tab; company descriptions can be auto-filled from job postings
 - **Contacts** — Keep recruiters, hiring managers, and references with name, email, phone; link each contact to many companies, jobs, and other contacts; two-tab detail panel (Notes with multi-entity tags, Relationships with clickable links)
 - **Dashboard** — Application statistics, status breakdown charts, and recent activity
-- **Search & Filter** — Full-text search across jobs, notes, and skills with status/tag filters
+- **Search & Filter** — Sticky page toolbars with title/count, search, filters, clear controls, and add actions across Jobs, Companies, Contacts, and Tracker
 - **Data Export/Import** — Backup and restore your data (including contacts, relationships, and note tags) as a zip bundle
 - **User Management** — Multi-user support with admin controls, profile editing, forgot-password reset links, and admin password resets (JWT authentication)
 - **Admin Settings** — Manage the AI model, Gemini API key, SMTP, and login-page branding from an admin-only Settings page
@@ -85,9 +85,9 @@ NEXT_PUBLIC_API_URL=http://localhost:8138
 docker-compose up --build
 ```
 
-> **Note:** The app version is injected at build time via the `APP_VERSION` build arg (default: 1.2.15). To override:
+> **Note:** The app version is injected at build time via the `APP_VERSION` build arg (default: 1.2.16). To override:
 > ```bash
-> APP_VERSION=1.2.15 docker-compose up --build
+> APP_VERSION=1.2.16 docker-compose up --build
 > ```
 
 The application will be available at:
@@ -178,6 +178,10 @@ The dev frontend image uses the repository root as its build context so it can
 copy the shared root `version.json`; `frontend/Dockerfile` copies application
 files from `frontend/` within that context.
 
+The backend startup command runs `python scripts/run_migrations.py` before
+Uvicorn. This wrapper stamps older pre-Alembic databases when needed, then runs
+`alembic upgrade head` so new columns are applied automatically on startup.
+
 ### Backend only
 
 ```bash
@@ -233,5 +237,5 @@ has been refactored for better readability and maintainability.
 
 ---
 
-**Version:** 1.2.15
-**Last Updated:** 2026-09-24
+**Version:** 1.2.16
+**Last Updated:** 2026-10-07

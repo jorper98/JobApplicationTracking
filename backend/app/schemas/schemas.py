@@ -22,17 +22,20 @@ class ResumeResponse(BaseModel):
 
 class CompanyCreate(BaseModel):
     name: str = Field(min_length=1)
+    description: Optional[str] = None
     notes: Optional[str] = None
 
 
 class CompanyUpdate(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     notes: Optional[str] = None
 
 
 class CompanyResponse(BaseModel):
     id: str
     name: str
+    description: Optional[str] = None
     notes: Optional[str] = None
     job_count: int = 0
     note_count: int = 0
@@ -50,6 +53,9 @@ class JobCreate(BaseModel):
     company: str
     company_id: Optional[str] = None
     description: Optional[str] = None
+    original_description: Optional[str] = None
+    description_fetch_method: Optional[str] = None
+    company_description: Optional[str] = None
     url: Optional[str] = None
     location: Optional[str] = None
     salary_min: Optional[int] = None
@@ -62,6 +68,9 @@ class JobUpdate(BaseModel):
     company: Optional[str] = None
     company_id: Optional[str] = None
     description: Optional[str] = None
+    original_description: Optional[str] = None
+    description_fetch_method: Optional[str] = None
+    company_description: Optional[str] = None
     url: Optional[str] = None
     location: Optional[str] = None
     salary_min: Optional[int] = None
@@ -77,6 +86,8 @@ class JobResponse(BaseModel):
     company: str
     company_id: Optional[str] = None
     description: Optional[str] = None
+    original_description: Optional[str] = None
+    description_fetch_method: Optional[str] = None
     url: Optional[str] = None
     location: Optional[str] = None
     extracted_skills: Optional[List[str]] = None

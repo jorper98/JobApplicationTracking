@@ -12,6 +12,11 @@ services:
       - "${POSTGRES_PORT:-8139}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-job_tracker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
@@ -25,11 +30,13 @@ services:
       SMTP_TLS: false
       SMTP_SSL: false
     depends_on:
-      - db
-      - mailpit
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8136 --reload
+    command: sh -c "python scripts/run_migrations.py && uvicorn app.main:app --host 0.0.0.0 --port 8136 --reload"
 
   mailpit:
     image: axllent/mailpit:latest
@@ -42,7 +49,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-1.2.15}
+        APP_VERSION: ${APP_VERSION:-1.2.16}
     ports:
       - "${FRONTEND_PORT:-8137}:8137"
     environment:

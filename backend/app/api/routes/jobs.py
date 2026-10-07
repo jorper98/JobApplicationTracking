@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import Company, Contact, ContactJob, ContactNote, ContactNoteTag, Job, JobAnalysis, JobJob, JobNote, Note, NoteMention, ApplicationStatus, User
 from app.schemas.schemas import JobCreate, JobUpdate, JobResponse, JobNoteCreate, JobNoteUpdate, JobNoteResponse
-from app.services.ai_service import extract_skills_from_job, fetch_job_from_url, extract_job_from_text, track_usage
-from app.api.routes.companies import get_or_create_company
+from app.services.ai_service import extract_skills_from_job, fetch_job_from_url_details, extract_job_from_text, track_usage
+from app.api.routes.companies import fill_company_description_if_empty, get_or_create_company
 from app.api.routes.applications import get_or_create_application
 from app.core.auth import get_current_user
 from app.core.activity import log_activity
@@ -29,6 +29,8 @@ def _job_to_response(job: Job, note_count: int = 0) -> JobResponse:
         company=job.company,
         company_id=job.company_id,
         description=job.description,
+        original_description=job.original_description,
+        description_fetch_method=job.description_fetch_method,
         url=job.url,
         location=job.location,
         extracted_skills=job.extracted_skills,
@@ -85,6 +87,10 @@ def _resolve_company_id(db: Session, user: User, company_id, company_name) -> st
     return None
 
 
+def _save_company_description(db: Session, user: User, company_id: str | None, company_description: str | None) -> None:
+    fill_company_description_if_empty(db, user.id, company_id, company_description)
+
+
 @router.post("/", response_model=JobResponse)
 def create_job(
     job_data: JobCreate,
@@ -105,6 +111,8 @@ def create_job(
         company=job_data.company,
         company_id=_resolve_company_id(db, user, job_data.company_id, job_data.company),
         description=job_data.description,
+        original_description=job_data.original_description or job_data.description,
+        description_fetch_method=job_data.description_fetch_method,
         url=job_data.url,
         location=job_data.location,
         salary_min=job_data.salary_min,
@@ -114,6 +122,7 @@ def create_job(
     )
     db.add(job)
     db.flush()
+    _save_company_description(db, user, job.company_id, job_data.company_description)
     # Track the new job in the SAME transaction: a failure here can never
     # leave a job committed without its tracker entry.
     get_or_create_application(db, job.id, user.id, job_data.status or ApplicationStatus.SAVED)
@@ -191,6 +200,9 @@ def update_job(job_id: str, job_data: JobUpdate, user: User = Depends(get_curren
                 job.company_id = None
             else:
                 job.company_id = _resolve_company_id(db, user, value, job.company)
+            continue
+        if field == "company_description":
+            _save_company_description(db, user, job.company_id, value)
             continue
         setattr(job, field, value)
 
@@ -283,7 +295,8 @@ def create_job_from_url(
 
     # 1. Scrape the page text
     try:
-        page_text = fetch_job_from_url(url)
+        fetched = fetch_job_from_url_details(url)
+        page_text = fetched["text"]
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -302,6 +315,8 @@ def create_job_from_url(
         company=extracted_company,
         company_id=_resolve_company_id(db, user, None, extracted_company),
         description=extracted.get("description"),
+        original_description=page_text,
+        description_fetch_method=fetched.get("method"),
         location=extracted.get("location"),
         url=url,
         extracted_skills=extracted.get("skills", []),
@@ -309,6 +324,7 @@ def create_job_from_url(
     )
     db.add(job)
     db.flush()
+    _save_company_description(db, user, job.company_id, extracted.get("company_description"))
     get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
     log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
@@ -328,7 +344,8 @@ def preview_job_from_url(
         raise HTTPException(status_code=400, detail="URL is required")
 
     try:
-        page_text = fetch_job_from_url(url)
+        fetched = fetch_job_from_url_details(url)
+        page_text = fetched["text"]
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -343,6 +360,9 @@ def preview_job_from_url(
         "title": extracted.get("title") or "Untitled Role",
         "company": extracted.get("company") or "Unknown",
         "description": extracted.get("description"),
+        "original_description": page_text,
+        "description_fetch_method": fetched.get("method"),
+        "company_description": extracted.get("company_description"),
         "location": extracted.get("location"),
         "url": url,
         "skills": extracted.get("skills", []),
@@ -375,6 +395,8 @@ def create_job_from_text(
         company=extracted_company,
         company_id=_resolve_company_id(db, user, None, extracted_company),
         description=extracted.get("description"),
+        original_description=str(text).strip(),
+        description_fetch_method="pasted_text",
         location=extracted.get("location"),
         url=payload.get("url"),
         extracted_skills=extracted.get("skills", []),
@@ -382,6 +404,7 @@ def create_job_from_text(
     )
     db.add(job)
     db.flush()
+    _save_company_description(db, user, job.company_id, extracted.get("company_description"))
     get_or_create_application(db, job.id, user.id, ApplicationStatus.SAVED)
     log_activity(db, user.id, "created", "job", job.id, job.title)
     db.commit()
@@ -410,6 +433,9 @@ def preview_job_from_text(
         "title": extracted.get("title") or "Untitled Role",
         "company": extracted.get("company") or "Unknown",
         "description": extracted.get("description"),
+        "original_description": str(text).strip(),
+        "description_fetch_method": "pasted_text",
+        "company_description": extracted.get("company_description"),
         "location": extracted.get("location"),
         "skills": extracted.get("skills", []),
         "extracted_data": extracted,

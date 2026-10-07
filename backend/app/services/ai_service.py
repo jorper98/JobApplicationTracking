@@ -384,12 +384,12 @@ def _validate_url_target(url: str) -> None:
             raise ValueError("URL resolves to a private or local address")
 
 
-def _clean_page_text(raw_text: str) -> str:
+def _clean_page_text_details(raw_text: str) -> tuple[str, str]:
     if _TRAFILATURA_AVAILABLE:
         try:
             extracted = trafilatura.extract(raw_text, include_tables=True, include_links=False)
             if extracted and len(extracted.strip()) >= 50:
-                return extracted.strip()
+                return extracted.strip(), "trafilatura"
         except Exception:
             pass
     soup = BeautifulSoup(raw_text, "html.parser")
@@ -399,14 +399,18 @@ def _clean_page_text(raw_text: str) -> str:
 
     text = soup.get_text(separator="\n")
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return "\n".join(lines)
+    return "\n".join(lines), "beautifulsoup"
 
 
-def _fetch_with_playwright(url: str) -> str:
+def _clean_page_text(raw_text: str) -> str:
+    return _clean_page_text_details(raw_text)[0]
+
+
+def _fetch_with_playwright(url: str) -> dict | None:
     """Render the page in headless Chromium for JS-heavy sites (SPAs, cookie
     consent walls). Returns cleaned text, or "" when unavailable/failed."""
     if not _PLAYWRIGHT_AVAILABLE:
-        return ""
+        return None
     for _attempt in range(2):
         try:
             with sync_playwright() as p:
@@ -437,14 +441,16 @@ def _fetch_with_playwright(url: str) -> str:
                     raw = page.inner_text("body")
                 finally:
                     browser.close()
-            cleaned = _clean_page_text(raw)
+            cleaned, cleaner = _clean_page_text_details(raw)
             if len(cleaned) >= 100:
-                return cleaned[:16000]
+                return {"text": cleaned[:16000], "method": f"playwright+{cleaner}"}
         except Exception as exc:
             print("Playwright fetch failed:", exc)
             time.sleep(1)
-    return ""
-def fetch_job_from_url(url: str) -> str:
+    return None
+
+
+def fetch_job_from_url_details(url: str) -> dict:
     """Fetch a job posting URL and return cleaned readable text."""
     current = url
     last_error = None
@@ -477,13 +483,24 @@ def fetch_job_from_url(url: str) -> str:
             time.sleep(1.5 * (attempt + 1))
             continue
 
-        cleaned = _clean_page_text(resp.text)
+        cleaned, cleaner = _clean_page_text_details(resp.text)
 
         if len(cleaned) >= 100:
-            return cleaned[:16000]
+            return {"text": cleaned[:16000], "method": f"httpx+{cleaner}"}
         last_error = ValueError("Page returned too little text - it may require login or block scraping.")
 
+    rendered = _fetch_with_playwright(current)
+    if rendered:
+        return rendered
+
     raise ValueError(f"Could not fetch the URL: {last_error}")
+
+
+def fetch_job_from_url(url: str) -> str:
+    """Fetch a job posting URL and return cleaned readable text."""
+    return fetch_job_from_url_details(url)["text"]
+
+
 def extract_job_from_text(page_text: str) -> dict:
     """Use AI to pull structured job info from scraped page text."""
     prompt = f"""Below is the raw text of a job posting web page. Extract the job details.
@@ -497,6 +514,7 @@ Return ONLY a JSON object (no markdown):
 {{
   "title": "job title",
   "company": "company name",
+  "company_description": "a concise factual description of the company if present, otherwise null",
   "location": "location or null",
   "description": "a clean 2-4 paragraph summary of the role and requirements",
   "skills": ["skill1", "skill2"]
@@ -508,6 +526,7 @@ If you cannot find a field, use null. Extract real skills mentioned in the posti
     return result if isinstance(result, dict) else {
         "title": None,
         "company": None,
+        "company_description": None,
         "location": None,
         "description": None,
         "skills": [],

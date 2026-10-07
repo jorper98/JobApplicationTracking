@@ -622,82 +622,80 @@ function JobsContent() {
 
   return (
     <PageShell maxWidth="max-w-[1920px]">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Jobs</h1>
-          <p className="text-gray-500 dark:text-[#8b8b96]">
-            {filteredJobs.length} of {jobs.length} jobs
-          </p>
-        </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Job
-        </button>
-      </div>
-
-      {/* Search + filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#5a5a64]" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search title, company, location, skills, notes..."
-            className={inputClass + " w-full pl-9"}
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={inputClass + " cursor-pointer"}
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.key} value={opt.key}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={companyFilter}
-          onChange={(e) => setCompanyFilter(e.target.value)}
-          className={inputClass + " cursor-pointer max-w-[200px]"}
-        >
-          <option value="">All Companies</option>
-          {companies.map((company) => (
-            <option key={company.id} value={company.id}>
-              {company.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={tagFilter}
-          onChange={(e) => setTagFilter(e.target.value)}
-          className={inputClass + " cursor-pointer max-w-[200px]"}
-        >
-          <option value="">All Tags</option>
-          {allTags.map((tag) => (
-            <option key={tag} value={tag}>
-              {tag}
-            </option>
-          ))}
-        </select>
-        {(search || statusFilter || tagFilter || companyFilter) && (
-          <button
-            onClick={() => {
-              setSearch("");
-              setStatusFilter("");
-              setTagFilter("");
-              setCompanyFilter("");
-            }}
-            className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors"
+      <div className="sticky top-[98px] z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 border-b border-gray-200/80 dark:border-white/[0.08] bg-[#f4f5f7]/95 dark:bg-[#0f0f17]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f4f5f7]/80 dark:supports-[backdrop-filter]:bg-[#0f0f17]/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex items-baseline gap-3 shrink-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white shrink-0">Jobs</h1>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] truncate">
+              {filteredJobs.length} of {jobs.length} jobs
+            </p>
+          </div>
+          <div className="relative w-full sm:w-[360px] xl:w-[420px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#5a5a64]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search title, company, location, skills, notes..."
+              className={inputClass + " w-full pl-9"}
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={inputClass + " cursor-pointer min-w-[130px]"}
           >
-            Clear filters
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className={inputClass + " cursor-pointer max-w-[190px]"}
+          >
+            <option value="">All Companies</option>
+            {companies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={tagFilter}
+            onChange={(e) => setTagFilter(e.target.value)}
+            className={inputClass + " cursor-pointer max-w-[170px]"}
+          >
+            <option value="">All Tags</option>
+            {allTags.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </select>
+          {(search || statusFilter || tagFilter || companyFilter) && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("");
+                setTagFilter("");
+                setCompanyFilter("");
+              }}
+              className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
+            >
+              Clear filters
+            </button>
+          )}
+          <button
+            onClick={openAddModal}
+            className="shrink-0 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors ml-auto"
+          >
+            <Plus className="w-4 h-4" />
+            Add Job
           </button>
-        )}
+        </div>
       </div>
 
       <div className="flex flex-col xl:flex-row items-start gap-6">
@@ -1468,6 +1466,8 @@ function JobsContent() {
         title={descJob?.title || ""}
         company={descJob?.company}
         description={descJob?.description}
+        originalDescription={descJob?.original_description}
+        descriptionFetchMethod={descJob?.description_fetch_method}
         url={descJob?.url}
       />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { X, ExternalLink, ArrowRight, Pencil } from "lucide-react";
 
@@ -12,10 +12,15 @@ interface JobDescriptionModalProps {
   title: string;
   company?: string;
   description?: string;
+  originalDescription?: string;
+  descriptionFetchMethod?: string;
   url?: string;
 }
 
-export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, company, description, url }: JobDescriptionModalProps) {
+export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, company, description, originalDescription, descriptionFetchMethod, url }: JobDescriptionModalProps) {
+  const [view, setView] = useState<"summary" | "original">("summary");
+  const hasOriginal = !!originalDescription?.trim();
+
   // Lock page scrolling while the modal is open so the wheel only scrolls
   // inside the modal, never the page behind it.
   useEffect(() => {
@@ -25,6 +30,7 @@ export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, compa
     return () => {
       document.body.style.overflow = original;
     };
+    setView("summary");
   }, [open]);
 
   if (!open) return null;
@@ -58,7 +64,43 @@ export function JobDescriptionModal({ open, onClose, onEdit, jobId, title, compa
         </div>
 
         <div className="px-6 py-5 overflow-y-auto flex-1 min-h-0 overscroll-contain">
-          {description ? (
+          {hasOriginal && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => setView("summary")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  view === "summary"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-[#c0c0c8] hover:bg-gray-200 dark:hover:bg-white/[0.1]"
+                }`}
+              >
+                AI summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("original")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  view === "original"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-[#c0c0c8] hover:bg-gray-200 dark:hover:bg-white/[0.1]"
+                }`}
+              >
+                Original posting
+              </button>
+              {descriptionFetchMethod && (
+                <span className="text-xs text-gray-400 dark:text-[#5a5a64]">
+                  Source: {descriptionFetchMethod}
+                </span>
+              )}
+            </div>
+          )}
+
+          {view === "original" && hasOriginal ? (
+            <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap leading-relaxed">
+              {originalDescription}
+            </p>
+          ) : description ? (
             <p className="text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap leading-relaxed">
               {description}
             </p>

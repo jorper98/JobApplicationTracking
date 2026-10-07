@@ -49,6 +49,7 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
+    command: sh -c "python scripts/run_migrations.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8136} --workers ${UVICORN_WORKERS:-1}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8136/health')\""]
@@ -63,7 +64,7 @@ services:
       dockerfile: Dockerfile.prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8136}
-        APP_VERSION: ${APP_VERSION:-1.2.15}
+        APP_VERSION: ${APP_VERSION:-1.2.16}
     ports:
       - "8137:8137"
     depends_on:

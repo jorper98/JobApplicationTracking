@@ -47,6 +47,16 @@ def get_or_create_company(db: Session, user_id: str, name: str) -> Company:
     return company
 
 
+def fill_company_description_if_empty(db: Session, user_id: str, company_id: str | None, description: str | None) -> None:
+    """Add AI-extracted company context without overwriting user-entered data."""
+    if not company_id or not description or not description.strip():
+        return
+    company = db.query(Company).filter(Company.id == company_id, Company.user_id == user_id).first()
+    if company and not (company.description or "").strip():
+        company.description = description.strip()
+        log_activity(db, user_id, "updated", "company", company.id, company.name, details="description from job posting")
+
+
 def _with_job_count(db: Session, user: User, companies: List[Company]) -> List[CompanyResponse]:
     counts = dict(
         db.query(Job.company_id, func.count(Job.id))
@@ -64,6 +74,7 @@ def _with_job_count(db: Session, user: User, companies: List[Company]) -> List[C
         CompanyResponse(
             id=c.id,
             name=c.name,
+            description=c.description,
             notes=c.notes,
             job_count=counts.get(c.id, 0),
             note_count=note_counts.get(c.id, 0),
@@ -106,6 +117,9 @@ def create_company(
 ):
     """Create a company. If one with the same name already exists, return it."""
     company = get_or_create_company(db, user.id, company_data.name)
+    if company_data.description is not None and company.description != company_data.description:
+        company.description = company_data.description
+        log_activity(db, user.id, "updated", "company", company.id, company.name, details="description")
     if company_data.notes is not None and company.notes != company_data.notes:
         company.notes = company_data.notes
         log_activity(db, user.id, "updated", "company", company.id, company.name, details="notes")
@@ -121,7 +135,7 @@ def update_company(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update a company's name or notes."""
+    """Update a company's name, description, or notes."""
     company = _get_owned_company(db, user, company_id)
 
     update_data = company_data.model_dump(exclude_unset=True)

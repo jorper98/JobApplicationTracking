@@ -71,6 +71,7 @@ function ContactsContent() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [listFilter, setListFilter] = useState("");
   const [selected, setSelected] = useState<ContactRecord | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("notes");
   const [showAdd, setShowAdd] = useState(false);
@@ -144,9 +145,20 @@ function ContactsContent() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter((c) => c.name.toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q));
-  }, [contacts, search]);
+    return contacts.filter((c) => {
+      const relationshipCount = c.companies.length + c.jobs.length + c.contacts.length;
+      const matchesSearch = !q || c.name.toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q) || (c.phone || "").toLowerCase().includes(q);
+      const matchesFilter =
+        !listFilter ||
+        (listFilter === "with_relationships" && relationshipCount > 0) ||
+        (listFilter === "no_relationships" && relationshipCount === 0) ||
+        (listFilter === "with_notes" && (c.note_count ?? 0) > 0) ||
+        (listFilter === "no_notes" && (c.note_count ?? 0) === 0) ||
+        (listFilter === "with_email" && !!c.email?.trim()) ||
+        (listFilter === "no_email" && !c.email?.trim());
+      return matchesSearch && matchesFilter;
+    });
+  }, [contacts, search, listFilter]);
 
   const allRelationships = useMemo(() => {
     const items: { type: EntityType; id: string; name: string; sub?: string }[] = [];
@@ -410,21 +422,51 @@ function ContactsContent() {
 
   return (
     <PageShell maxWidth="max-w-[1920px]">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Contacts</h1>
-          <p className="text-gray-500 dark:text-[#8b8b96]">{contacts.length} contacts</p>
+      <div className="sticky top-[98px] z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 border-b border-gray-200/80 dark:border-white/[0.08] bg-[#f4f5f7]/95 dark:bg-[#0f0f17]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f4f5f7]/80 dark:supports-[backdrop-filter]:bg-[#0f0f17]/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex items-baseline gap-3 shrink-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white shrink-0">Contacts</h1>
+            <p className="text-sm text-gray-500 dark:text-[#8b8b96] truncate">{filtered.length} of {contacts.length} contacts</p>
+          </div>
+          <div className="relative w-full sm:w-[320px] xl:w-[380px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#5a5a64]" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search contacts..." className={inputClass + " pl-9"} />
+          </div>
+          <select
+            value={listFilter}
+            onChange={(e) => setListFilter(e.target.value)}
+            className={inputClass + " cursor-pointer w-full sm:w-[180px]"}
+          >
+            <option value="">All Contacts</option>
+            <option value="with_relationships">With Relationships</option>
+            <option value="no_relationships">No Relationships</option>
+            <option value="with_notes">With Notes</option>
+            <option value="no_notes">No Notes</option>
+            <option value="with_email">With Email</option>
+            <option value="no_email">No Email</option>
+          </select>
+          {(search || listFilter) && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setListFilter("");
+              }}
+              className="text-sm text-gray-500 dark:text-[#8b8b96] hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
+            >
+              Clear filters
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setShowAdd(true);
+              setError("");
+            }}
+            className="ml-auto shrink-0 flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Contact
+          </button>
         </div>
-        <button
-          onClick={() => {
-            setShowAdd(true);
-            setError("");
-          }}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Contact
-        </button>
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
@@ -432,10 +474,6 @@ function ContactsContent() {
 
       <div className="flex flex-col md:flex-row items-start gap-6">
         <div className="w-full md:w-[380px] md:shrink-0 space-y-2">
-          <div className="relative mb-2">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#5a5a64]" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search contacts..." className={inputClass + " pl-9"} />
-          </div>
           {filtered.map((contact) => (
             <div
               key={contact.id}

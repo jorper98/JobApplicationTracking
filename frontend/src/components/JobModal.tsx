@@ -18,6 +18,7 @@ interface JobModalProps {
 interface Company {
   id: string;
   name: string;
+  description?: string | null;
   notes?: string | null;
   job_count?: number;
 }
@@ -242,6 +243,9 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany, initial
         title: preview.title,
         company: preview.company,
         description: preview.description,
+        original_description: preview.original_description,
+        description_fetch_method: preview.description_fetch_method,
+        company_description: preview.company_description,
         url: preview.url,
         location: preview.location,
       };
@@ -509,6 +513,11 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany, initial
                     <p className="text-sm text-gray-500 dark:text-[#8b8b96] mb-3">
                       {preview.company} {preview.location ? " | " + preview.location : ""}
                     </p>
+                    {preview.description_fetch_method && (
+                      <p className="text-xs text-gray-400 dark:text-[#5a5a64] mb-3">
+                        Description source: {preview.description_fetch_method}
+                      </p>
+                    )}
                     <div className="max-h-48 overflow-y-auto bg-white dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 text-sm text-gray-700 dark:text-[#c0c0c8]">
                       {preview.description || <em className="text-gray-400 dark:text-[#5a5a64]">No description extracted</em>}
                     </div>
@@ -556,6 +565,11 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany, initial
                     <p className="text-sm text-gray-500 dark:text-[#8b8b96] mb-3">
                       {preview.company} {preview.location ? " | " + preview.location : ""}
                     </p>
+                    {preview.description_fetch_method && (
+                      <p className="text-xs text-gray-400 dark:text-[#5a5a64] mb-3">
+                        Description source: {preview.description_fetch_method}
+                      </p>
+                    )}
                     <div className="max-h-48 overflow-y-auto bg-white dark:bg-[#0d0d14] border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 text-sm text-gray-700 dark:text-[#c0c0c8]">
                       {preview.description || <em className="text-gray-400 dark:text-[#5a5a64]">No description extracted</em>}
                     </div>
@@ -585,6 +599,8 @@ export function JobModal({ isOpen, onClose, job, onSave, initialCompany, initial
         title={form.title || "Job"}
         company={form.company}
         description={form.description}
+        originalDescription={job?.original_description}
+        descriptionFetchMethod={job?.description_fetch_method}
         url={form.url}
       />
     </div>

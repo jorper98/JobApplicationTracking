@@ -45,6 +45,7 @@ export function JobViewModal({ jobId, status, onClose }: JobViewModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showDesc, setShowDesc] = useState(false);
+  const [showOriginalDesc, setShowOriginalDesc] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
@@ -52,6 +53,7 @@ export function JobViewModal({ jobId, status, onClose }: JobViewModalProps) {
     setCompanyNotes("");
     setNotes([]);
     setShowDesc(false);
+    setShowOriginalDesc(false);
     setError("");
     setLoading(true);
     (async () => {
@@ -161,6 +163,11 @@ export function JobViewModal({ jobId, status, onClose }: JobViewModalProps) {
                   "Status",
                   statusKey ? STATUS_LABELS[statusKey] : undefined
                 )}
+                {infoRow(
+                  <FileText className="w-3.5 h-3.5" />,
+                  "Description Source",
+                  job.description_fetch_method || undefined
+                )}
               </div>
 
               {/* Tags */}
@@ -228,6 +235,27 @@ export function JobViewModal({ jobId, status, onClose }: JobViewModalProps) {
                   {showDesc && (
                     <p className="mt-2 text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 max-h-64 overflow-y-auto overscroll-contain">
                       {job.description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {job.original_description && job.original_description.trim() && (
+                <div>
+                  <button
+                    onClick={() => setShowOriginalDesc((v) => !v)}
+                    className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-[#c0c0c8] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    {showOriginalDesc ? (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    )}
+                    {showOriginalDesc ? "Hide original job description" : "Show original job description"}
+                  </button>
+                  {showOriginalDesc && (
+                    <p className="mt-2 text-sm text-gray-800 dark:text-[#d4d4dd] whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.08] rounded-lg p-3 max-h-64 overflow-y-auto overscroll-contain">
+                      {job.original_description}
                     </p>
                   )}
                 </div>
